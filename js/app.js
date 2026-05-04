@@ -512,6 +512,7 @@ async function sendMessage() {
                         if (thinkingContentEl) {
                             thinkingContentEl.innerHTML = marked.parse(thinkingContent);
                         }
+                        scrollToBottom();
                     }
 
                     if (content) {
@@ -533,6 +534,7 @@ async function sendMessage() {
                                 textEl.innerHTML = marked.parse(normalContent);
                             }
                         }
+                        scrollToBottom();
                     }
                 } catch (e) {
                     // Skip malformed JSON

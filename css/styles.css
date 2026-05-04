@@ -247,7 +247,6 @@ body {
 #chat-container {
     flex: 1;
     overflow-y: auto;
-    scroll-behavior: smooth;
 }
 
 #chat-container::-webkit-scrollbar {
