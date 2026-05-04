@@ -526,11 +526,11 @@ async function sendMessage() {
                                 contentDiv.className = 'message text-only';
                                 assistantEl.querySelector('.message-text').appendChild(contentDiv);
                             }
-                            contentDiv.textContent += content;
+                            contentDiv.innerHTML = marked.parse(normalContent);
                         } else {
                             const textEl = assistantEl.querySelector('.message-text');
                             if (textEl) {
-                                textEl.textContent += content;
+                                textEl.innerHTML = marked.parse(normalContent);
                             }
                         }
                     }
