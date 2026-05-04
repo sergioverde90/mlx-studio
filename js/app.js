@@ -384,7 +384,11 @@ function buildRequestPayload(messages) {
 
 async function sendMessage() {
     const text = messageInput.value.trim();
-    if (!text || !currentConversationId) return;
+    if (!text) return;
+
+    if (!currentConversationId) {
+        createConversation();
+    }
 
     messageInput.value = '';
     messageInput.style.height = 'auto';
