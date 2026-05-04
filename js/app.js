@@ -4,6 +4,8 @@ const CONVERSATIONS_KEY = 'tars_conversations';
 const DEFAULT_CONFIG = {
     apiUrl: 'http://localhost:8080/v1/chat/completions',
     systemPrompt: '',
+    model: 'unsloth/gemma-4-E4B-it-UD-MLX-4bit',
+    maxTokens: 8192,
     temperature: 0.8,
     minP: 0.06,
     presencePenalty: 1.2,
@@ -26,7 +28,9 @@ const welcomeScreen = document.getElementById('welcome-screen');
 const messageInput = document.getElementById('message-input');
 const sendBtn = document.getElementById('send-btn');
 const stopBtn = document.getElementById('stop-btn');
+const thinkingToggleBtn = document.getElementById('thinking-toggle-btn');
 const chatContainer = document.getElementById('chat-container');
+const mainEl = document.getElementById('main');
 const sidebarToggle = document.getElementById('sidebar-toggle');
 const settingsBtn = document.getElementById('settings-btn');
 const settingsOverlay = document.getElementById('settings-overlay');
@@ -35,6 +39,14 @@ const saveSettingsBtn = document.getElementById('save-settings');
 const sidebarOverlay = document.createElement('div');
 sidebarOverlay.id = 'sidebar-overlay';
 document.body.appendChild(sidebarOverlay);
+
+// Code Preview Panel Elements
+const codePreviewPanel = document.getElementById('code-preview-panel');
+const codePreviewTitle = document.getElementById('code-preview-title');
+const codePreviewLang = document.getElementById('code-preview-lang');
+const codePreviewCode = document.getElementById('code-preview-code');
+const codePreviewCopy = document.getElementById('code-preview-copy');
+const codePreviewClose = document.getElementById('code-preview-close');
 
 // Configure marked
 marked.setOptions({
@@ -54,6 +66,8 @@ function init() {
     loadLastConversation();
     setupEventListeners();
     loadSettings();
+    updateThinkingToggleVisual();
+    setupCodePreviewPanel();
     messageInput.focus();
 }
 
@@ -116,6 +130,7 @@ function selectConversation(id) {
     welcomeScreen.style.display = 'none';
     renderMessages(conv.messages);
     renderConversations();
+    closeCodePreviewPanel();
 
     if (window.innerWidth <= 768) {
         closeSidebar();
@@ -365,7 +380,7 @@ function buildRequestMessages() {
 
 function buildRequestPayload(messages) {
     const payload = {
-        model: 'unsloth/Qwen3.6-35B-A3B-UD-MLX-4bit',
+        model: config.model,
         messages: messages,
         stream: true,
         temperature: config.temperature,
@@ -373,6 +388,7 @@ function buildRequestPayload(messages) {
         presence_penalty: config.presencePenalty,
         repeat_penalty: config.repeatPenalty,
         thinking_budget_tokens: config.thinkingBudget,
+        max_tokens: config.maxTokens,
         chat_template_kwargs: {
             enable_thinking: config.enableThinking,
             preserve_thinking: false
@@ -381,6 +397,8 @@ function buildRequestPayload(messages) {
 
     return payload;
 }
+
+let isGenerating = false;
 
 async function sendMessage() {
     const text = messageInput.value.trim();
@@ -410,6 +428,8 @@ async function sendMessage() {
 
     const messages = buildRequestMessages();
     const payload = buildRequestPayload(messages);
+
+    isGenerating = true;
 
     abortController = new AbortController();
 
@@ -535,6 +555,7 @@ async function sendMessage() {
                             }
                         }
                         scrollToBottom();
+                        setTimeout(() => checkForCodeBlocks(), 100);
                     }
                 } catch (e) {
                     // Skip malformed JSON
@@ -553,6 +574,8 @@ async function sendMessage() {
         } else if (textEl && normalContent) {
             textEl.innerHTML = marked.parse(normalContent);
         }
+
+        setTimeout(() => checkForCodeBlocks(), 50);
 
         if (statsEl && assistantEl) {
             const totalTime = ((Date.now() - firstTokenTime) / 1000).toFixed(1);
@@ -576,6 +599,7 @@ async function sendMessage() {
         appendMessage('assistant', `**Error:** ${err.message}`);
     } finally {
         abortController = null;
+        isGenerating = false;
         sendBtn.disabled = false;
         sendBtn.classList.remove('hidden');
         stopBtn.classList.add('hidden');
@@ -591,6 +615,12 @@ function stopGeneration() {
 
 function setupEventListeners() {
     newChatBtn.addEventListener('click', createConversation);
+
+    thinkingToggleBtn.addEventListener('click', () => {
+        config.enableThinking = !config.enableThinking;
+        saveConfig();
+        updateThinkingToggleVisual();
+    });
 
     sendBtn.addEventListener('click', () => {
         if (messageInput.value.trim() && !sendBtn.disabled) sendMessage();
@@ -638,8 +668,10 @@ function setupEventListeners() {
         config.presencePenalty = parseFloat(document.getElementById('setting-presence-penalty').value) || DEFAULT_CONFIG.presencePenalty;
         config.repeatPenalty = parseFloat(document.getElementById('setting-repeat-penalty').value) || DEFAULT_CONFIG.repeatPenalty;
         config.thinkingBudget = parseInt(document.getElementById('setting-thinking-budget').value) || DEFAULT_CONFIG.thinkingBudget;
-        config.enableThinking = document.getElementById('setting-enable-thinking').checked;
+        config.model = document.getElementById('setting-model').value || DEFAULT_CONFIG.model;
+        config.maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || DEFAULT_CONFIG.maxTokens;
         saveConfig();
+        updateThinkingToggleVisual();
         settingsOverlay.classList.add('hidden');
     });
 
@@ -662,6 +694,10 @@ function closeSidebar() {
     sidebarOverlay.classList.remove('visible');
 }
 
+function updateThinkingToggleVisual() {
+    thinkingToggleBtn.classList.toggle('active', config.enableThinking !== false);
+}
+
 function loadSettings() {
     document.getElementById('setting-api-url').value = config.apiUrl || '';
     document.getElementById('setting-system-prompt').value = config.systemPrompt || '';
@@ -670,7 +706,188 @@ function loadSettings() {
     document.getElementById('setting-presence-penalty').value = config.presencePenalty ?? '';
     document.getElementById('setting-repeat-penalty').value = config.repeatPenalty ?? '';
     document.getElementById('setting-thinking-budget').value = config.thinkingBudget ?? '';
-    document.getElementById('setting-enable-thinking').checked = config.enableThinking !== false;
+    document.getElementById('setting-model').value = config.model || '';
+    document.getElementById('setting-max-tokens').value = config.maxTokens ?? '';
+}
+
+function closeCodePreviewPanel() {
+    if (!codePreviewPanel) return;
+    codePreviewPanel.classList.remove('visible');
+    mainEl.classList.remove('has-code-panel');
+}
+
+function setupCodePreviewPanel() {
+    if (!codePreviewPanel) return;
+
+    codePreviewClose.addEventListener('click', () => {
+        closeCodePreviewPanel();
+    });
+
+    codePreviewCopy.addEventListener('click', () => {
+        const code = codePreviewCode.textContent;
+        navigator.clipboard.writeText(code).then(() => {
+            const originalText = codePreviewCopy.textContent;
+            codePreviewCopy.textContent = 'Copied!';
+            codePreviewCopy.style.background = 'var(--color-primary)';
+            setTimeout(() => {
+                codePreviewCopy.textContent = originalText;
+                codePreviewCopy.style.background = '';
+            }, 1500);
+        });
+    });
+
+    const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
+                checkForCodeBlocks();
+            } else if (mutation.type === 'characterData' && mutation.target.parentElement) {
+                checkForCodeBlocks();
+            }
+        }
+    });
+
+    observer.observe(messagesContainer, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
+}
+
+function checkForCodeBlocks() {
+    if (!codePreviewPanel) return;
+    
+    const messages = document.querySelectorAll('#messages .message.assistant');
+    if (messages.length === 0) return;
+    const lastMessage = messages[messages.length - 1];
+    
+    let target = null;
+    
+    for (const message of messages) {
+        const textEl = message.querySelector('.message-text');
+        if (!textEl) continue;
+        
+        const thinkingBlock = textEl.querySelector('.thinking-block');
+        
+        const allCode = textEl.querySelectorAll('pre code[class*="language-"]');
+        let codeElements = [];
+        for (const el of allCode) {
+            if (thinkingBlock && el.closest('.thinking-block')) {
+                continue;
+            }
+            codeElements.push(el);
+        }
+
+        
+        for (let i = codeElements.length - 1; i >= 0; i--) {
+            const el = codeElements[i];
+            const langMatch = el.className.match(/language-(\w+)/);
+            if (langMatch && !el.closest('[data-previewed]')) {
+                target = el;
+                break;
+            }
+        }
+        if (target) break;
+    }
+    
+    if (!target) return;
+
+    const parentPre = target.closest('pre');
+
+    const langMatch = target.className.match(/language-(\w+)/);
+    const lang = langMatch ? langMatch[1] : 'text';
+
+    codePreviewLang.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+    codePreviewCode.textContent = target.textContent;
+    codePreviewCode.className = 'language-' + lang;
+    Prism.highlightElement(codePreviewCode);
+
+    if (parentPre) parentPre.dataset.previewed = 'true';
+
+    if (isGenerating) {
+        mainEl.classList.add('has-code-panel');
+        codePreviewPanel.classList.add('visible');
+    }
+
+    const textEl = lastMessage.querySelector('.message-text');
+    if (textEl) {
+        const allCodeBlocks = textEl.querySelectorAll('pre:has(code[class*="language-"])');
+        for (const pre of allCodeBlocks) {
+            if (!pre.querySelector('.open-code-btn')) {
+                const codeEl = pre.querySelector('code');
+                const lMatch = codeEl.className.match(/language-(\w+)/);
+                const l = lMatch ? lMatch[1] : 'text';
+                const c = codeEl.textContent;
+
+                const lines = c.trim().split('\n').length;
+                const isShell = ['bash', 'sh', 'shell', 'zsh'].includes(l);
+
+                const hasOpenBtn = lines > 1 && !isShell;
+                const hasCopyBtn = isShell;
+
+                if (hasOpenBtn || hasCopyBtn) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'code-block-actions';
+
+                    if (hasOpenBtn) {
+                        const btn = document.createElement('button');
+                        btn.className = 'open-code-btn';
+                        btn.title = 'Load code';
+                        btn.innerHTML = `
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <polyline points="9 21 3 21 3 15"></polyline>
+                                <line x1="21" y1="3" x2="14" y2="10"></line>
+                                <line x1="3" y1="21" x2="10" y2="14"></line>
+                            </svg>
+                        `;
+                        btn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            codePreviewLang.textContent = l.charAt(0).toUpperCase() + l.slice(1);
+                            codePreviewCode.textContent = c;
+                            codePreviewCode.className = 'language-' + l;
+                            Prism.highlightElement(codePreviewCode);
+                            mainEl.classList.add('has-code-panel');
+                            codePreviewPanel.classList.add('visible');
+                            pre.dataset.previewed = 'true';
+                        });
+                        wrapper.appendChild(btn);
+                    }
+
+                    if (hasCopyBtn) {
+                        const copyBtn = document.createElement('button');
+                        copyBtn.className = 'copy-code-btn';
+                        copyBtn.title = 'Copy to clipboard';
+                        copyBtn.innerHTML = `
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        `;
+                        copyBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(c).then(() => {
+                                copyBtn.classList.add('copied');
+                                copyBtn.innerHTML = `
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="20 6 9 17 4 12"></polyline>
+                                    </svg>
+                                `;
+                                setTimeout(() => {
+                                    copyBtn.classList.remove('copied');
+                                    copyBtn.innerHTML = `
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                        </svg>
+                                    `;
+                                }, 1500);
+                            });
+                        });
+                        wrapper.appendChild(copyBtn);
+                    }
+
+                    pre.appendChild(wrapper);
+                }
+            }
+        }
+    }
+
 }
 
 init();
