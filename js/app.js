@@ -554,7 +554,11 @@ async function sendMessage() {
             statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">${finalSpeed} tok/s</span><span class="stats-item stats-time">${totalTime}s</span>`;
         }
 
-        conv.messages.push({ role: 'assistant', content: normalContent });
+        let fullContent = normalContent;
+        if (thinkingContent) {
+            fullContent = `<thinking>\n${thinkingContent}\n</thinking>\n\n${normalContent}`;
+        }
+        conv.messages.push({ role: 'assistant', content: fullContent });
         saveConversations();
 
     } catch (err) {
