@@ -1,10 +1,11 @@
+// === config.js ===
 const CONFIG_KEY = 'tars_config';
 const CONVERSATIONS_KEY = 'tars_conversations';
 
 const DEFAULT_CONFIG = {
     apiUrl: 'http://localhost:8080/v1/chat/completions',
     systemPrompt: '',
-    model: 'unsloth/gemma-4-E4B-it-UD-MLX-4bit',
+    model: 'unsloth/gemma-4-E4B-E4B-it-UD-MLX-4bit',
     maxTokens: 8192,
     temperature: 0.8,
     minP: 0.06,
@@ -14,166 +15,121 @@ const DEFAULT_CONFIG = {
     enableThinking: true
 };
 
-let config = loadConfig();
-let conversations = loadConversations();
-let currentConversationId = null;
-let abortController = null;
+const API_MODEL_PARAMS = {
+    temperature: 'temperature',
+    minP: 'min_p',
+    presencePenalty: 'presence_penalty',
+    repeatPenalty: 'repeat_penalty',
+    thinkingBudget: 'thinking_budget_tokens',
+    maxTokens: 'max_tokens'
+};
 
-// DOM Elements
-const sidebar = document.getElementById('sidebar');
-const conversationsList = document.getElementById('conversations-list');
-const newChatBtn = document.getElementById('new-chat-btn');
-const messagesContainer = document.getElementById('messages');
-const welcomeScreen = document.getElementById('welcome-screen');
-const messageInput = document.getElementById('message-input');
-const sendBtn = document.getElementById('send-btn');
-const stopBtn = document.getElementById('stop-btn');
-const thinkingToggleBtn = document.getElementById('thinking-toggle-btn');
-const chatContainer = document.getElementById('chat-container');
-const mainEl = document.getElementById('main');
-const sidebarToggle = document.getElementById('sidebar-toggle');
-const settingsBtn = document.getElementById('settings-btn');
-const settingsOverlay = document.getElementById('settings-overlay');
-const closeSettingsBtn = document.getElementById('close-settings');
-const saveSettingsBtn = document.getElementById('save-settings');
-const sidebarOverlay = document.createElement('div');
-sidebarOverlay.id = 'sidebar-overlay';
-document.body.appendChild(sidebarOverlay);
+const STREAM_LINE_PREFIX = 'data: ';
+const STREAM_DONE_TOKEN = 'data: [DONE]';
 
-// Code Preview Panel Elements
-const codePreviewPanel = document.getElementById('code-preview-panel');
-const codePreviewTitle = document.getElementById('code-preview-title');
-const codePreviewLang = document.getElementById('code-preview-lang');
-const codePreviewCode = document.getElementById('code-preview-code');
-const codePreviewCopy = document.getElementById('code-preview-copy');
-const codePreviewClose = document.getElementById('code-preview-close');
+const UI = {
+    MAX_INPUT_HEIGHT: 200,
+    TITLE_MAX_LENGTH: 40,
+    MOBILE_BREAKPOINT: 768
+};
 
-// Configure marked
-marked.setOptions({
-    breaks: true,
-    gfm: true
-});
+const DOM_IDS = {
+    sidebar: 'sidebar',
+    conversationsList: 'conversations-list',
+    newChatBtn: 'new-chat-btn',
+    messages: 'messages',
+    welcomeScreen: 'welcome-screen',
+    messageInput: 'message-input',
+    sendBtn: 'send-btn',
+    stopBtn: 'stop-btn',
+    thinkingToggleBtn: 'thinking-toggle-btn',
+    chatContainer: 'chat-container',
+    main: 'main',
+    sidebarToggle: 'sidebar-toggle',
+    settingsBtn: 'settings-btn',
+    settingsOverlay: 'settings-overlay',
+    closeSettings: 'close-settings',
+    saveSettings: 'save-settings',
+    sidebarOverlay: 'sidebar-overlay'
+};
 
-// Initialize
-function init() {
-    renderConversations();
-    loadLastConversation();
-    setupEventListeners();
-    loadSettings();
-    updateThinkingToggleVisual();
-    setupCodePreviewPanel();
-    messageInput.focus();
-}
+const SETTINGS_FIELDS = {
+    apiUrl: 'setting-api-url',
+    systemPrompt: 'setting-system-prompt',
+    temperature: 'setting-temperature',
+    minP: 'setting-min-p',
+    presencePenalty: 'setting-presence-penalty',
+    repeatPenalty: 'setting-repeat-penalty',
+    thinkingBudget: 'setting-thinking-budget',
+    model: 'setting-model',
+    maxTokens: 'setting-max-tokens'
+};
 
-function loadConfig() {
+// === store.js ===
+function safeParse(key, fallback) {
     try {
-        const saved = localStorage.getItem(CONFIG_KEY);
-        return saved ? { ...DEFAULT_CONFIG, ...JSON.parse(saved) } : { ...DEFAULT_CONFIG };
+        const saved = localStorage.getItem(key);
+        return saved ? JSON.parse(saved) : fallback;
     } catch {
-        return { ...DEFAULT_CONFIG };
+        return fallback;
     }
 }
 
-function saveConfig() {
+function loadConfig() {
+    const saved = safeParse(CONFIG_KEY, {});
+    return { ...DEFAULT_CONFIG, ...saved };
+}
+
+function saveConfig(config) {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }
 
 function loadConversations() {
-    try {
-        const saved = localStorage.getItem(CONVERSATIONS_KEY);
-        return saved ? JSON.parse(saved) : [];
-    } catch {
-        return [];
-    }
+    return safeParse(CONVERSATIONS_KEY, []);
 }
 
-function saveConversations() {
-    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+function saveConversations(conversations) {
+    var stringJson = JSON.stringify(conversations || state.conversations);
+    localStorage.setItem(CONVERSATIONS_KEY, stringJson);
 }
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
 }
 
-function loadLastConversation() {
-    if (conversations.length > 0) {
-        const lastConv = conversations[conversations.length - 1];
-        selectConversation(lastConv.id);
-    }
-}
+// === renderer.js ===
+function renderConversations(conversations, currentId, onSelect, onDelete) {
+    const list = document.getElementById('conversations-list');
+    list.innerHTML = '';
 
-function createConversation() {
-    const conv = {
-        id: generateId(),
-        title: 'New Chat',
-        messages: [],
-        createdAt: Date.now()
-    };
-    conversations.unshift(conv);
-    saveConversations();
-    selectConversation(conv.id);
-    renderConversations();
-    messageInput.focus();
-}
-
-function selectConversation(id) {
-    currentConversationId = id;
-    const conv = conversations.find(c => c.id === id);
-    if (!conv) return;
-
-    welcomeScreen.style.display = 'none';
-    renderMessages(conv.messages);
-    renderConversations();
-    closeCodePreviewPanel();
-
-    if (window.innerWidth <= 768) {
-        closeSidebar();
-    }
-}
-
-function deleteConversation(id, e) {
-    e.stopPropagation();
-    conversations = conversations.filter(c => c.id !== id);
-    saveConversations();
-
-    if (currentConversationId === id) {
-        if (conversations.length > 0) {
-            selectConversation(conversations[0].id);
-        } else {
-            currentConversationId = null;
-            messagesContainer.innerHTML = '';
-            welcomeScreen.style.display = 'flex';
-        }
-    }
-    renderConversations();
-}
-
-function renderConversations() {
-    conversationsList.innerHTML = '';
     conversations.forEach(conv => {
         const item = document.createElement('div');
-        item.className = 'conversation-item' + (conv.id === currentConversationId ? ' active' : '');
+        item.className = 'conversation-item' + (conv.id === currentId ? ' active' : '');
         item.innerHTML = `
             <span class="conversation-title">${escapeHtml(conv.title)}</span>
             <button class="conversation-delete" title="Delete">&times;</button>
         `;
-        item.addEventListener('click', () => selectConversation(conv.id));
-        item.querySelector('.conversation-delete').addEventListener('click', (e) => deleteConversation(conv.id, e));
-        conversationsList.appendChild(item);
+        item.addEventListener('click', () => onSelect(conv.id));
+        item.querySelector('.conversation-delete').addEventListener('click', (e) => onDelete(conv.id, e));
+        list.appendChild(item);
     });
 }
 
-function renderMessages(messages) {
+function renderMessages(messagesContainer, messages, onHighlight, onProcess, onCopy, onOpen) {
     messagesContainer.innerHTML = '';
     messages.forEach(msg => {
-        appendMessage(msg.role, msg.content, false);
+        appendMessage(messagesContainer, msg.role, msg.content, false);
     });
-    highlightAllCode();
-    processAllCodeBlocks();
+    onHighlight();
+    onProcess();
+    if (onCopy) {
+        setupCopyButtonsOnCodeBlocks(messagesContainer, onCopy, onOpen);
+    }
     scrollToBottom();
 }
 
-function appendMessage(role, content, animate = true) {
+function appendMessage(container, role, content, animate = true) {
+    const welcomeScreen = document.getElementById('welcome-screen');
     if (welcomeScreen.style.display !== 'none') {
         welcomeScreen.style.display = 'none';
     }
@@ -197,22 +153,9 @@ function appendMessage(role, content, animate = true) {
         const { thinkingHtml, contentHtml } = parseThinkingAndContent(content);
         if (thinkingHtml || contentHtml) {
             if (thinkingHtml) {
-                const thinkingBlock = document.createElement('div');
-                thinkingBlock.className = 'thinking-block';
-                thinkingBlock.innerHTML = `
-                    <button class="thinking-toggle" onclick="toggleThinking(this)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="9 18 15 12 9 6"></polyline>
-                        </svg>
-                        Thinking...
-                    </button>
-                    <div class="thinking-content">
-                        <div class="message text-only"></div>
-                    </div>
-                `;
+                const thinkingBlock = createThinkingBlock(thinkingHtml);
                 textEl.innerHTML = '';
                 textEl.appendChild(thinkingBlock);
-                thinkingBlock.querySelector('.thinking-content .message.text-only').innerHTML = marked.parse(thinkingHtml);
             }
             if (contentHtml) {
                 if (thinkingHtml) {
@@ -231,12 +174,31 @@ function appendMessage(role, content, animate = true) {
         textEl.innerHTML = escapeHtml(content);
     }
 
-    messagesContainer.appendChild(messageEl);
+    container.appendChild(messageEl);
     scrollToBottom();
     return messageEl;
 }
 
-function highlightAllCode() {
+function createThinkingBlock(contentHtml) {
+    const thinkingBlock = document.createElement('div');
+    thinkingBlock.className = 'thinking-block';
+    thinkingBlock.innerHTML = `
+        <button class="thinking-toggle" onclick="toggleThinking(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+            Thinking...
+        </button>
+        <div class="thinking-content">
+            <div class="message text-only"></div>
+        </div>
+    `;
+    const html = marked.parse(contentHtml);
+    thinkingBlock.querySelector('.thinking-content .message.text-only').innerHTML = html;
+    return thinkingBlock;
+}
+
+function highlightAllCode(messagesContainer) {
     const blocks = messagesContainer.querySelectorAll('pre code[class*="language-"]');
     for (const block of blocks) {
         if (!block.closest('.thinking-block')) {
@@ -245,102 +207,12 @@ function highlightAllCode() {
     }
 }
 
-function createCompactCodeButton(code, lang) {
-    const lines = code.trim().split('\n');
-    const previewLines = lines.slice(0, 2).join('\n');
-    const displayCode = lines.length > 2
-        ? previewLines + '\n' + lines[2].substring(0, 60) + (lines[2].length > 60 ? '…' : '')
-        : code;
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'compact-code-block';
-    wrapper.setAttribute('data-code', code);
-    wrapper.setAttribute('data-lang', lang);
-
-    const langLabel = lang.charAt(0).toUpperCase() + lang.slice(1);
-
-    wrapper.innerHTML = `
-        <div class="compact-code-header">
-            <span class="compact-code-lang">${langLabel}</span>
-            <span class="compact-code-lines">${lines.length} lines</span>
-        </div>
-        <pre><code class="language-${lang}">${escapeHtml(displayCode)}</code></pre>
-        <button class="compact-code-btn" title="Load full code in preview">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 3 21 3 21 9"></polyline>
-                <polyline points="9 21 3 21 3 15"></polyline>
-                <line x1="21" y1="3" x2="14" y2="10"></line>
-                <line x1="3" y1="21" x2="10" y2="14"></line>
-            </svg>
-            Load in Preview
-        </button>
-    `;
-
-    const btn = wrapper.querySelector('.compact-code-btn');
-    btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        codePanelUserClosed = false;
-        codePreviewLang.textContent = langLabel;
-        codePreviewCode.textContent = code;
-        codePreviewCode.className = 'language-' + lang;
-        Prism.highlightElement(codePreviewCode);
-        mainEl.classList.add('has-code-panel');
-        codePreviewPanel.classList.add('visible');
-    });
-
-    return wrapper;
-}
-
-function replaceCodeBlocksWithCompactButtons(textEl) {
-    const codeBlocks = textEl.querySelectorAll('pre:has(code[class*="language-"])');
-    for (const pre of codeBlocks) {
-        if (pre.closest('.thinking-block')) continue;
-        if (pre.classList.contains('compact-code-block')) continue;
-
-        const codeEl = pre.querySelector('code');
-        const lMatch = codeEl.className.match(/language-(\w+)/);
-        const lang = lMatch ? lMatch[1] : 'text';
-        const code = codeEl.textContent;
-
-        const compactBtn = createCompactCodeButton(code, lang);
-        pre.replaceWith(compactBtn);
-    }
-}
-
-function updateCodePanelFromCompactButtons() {
-    if (!codePreviewPanel) return;
-    const compactBlocks = document.querySelectorAll('#messages .compact-code-block');
-    if (compactBlocks.length === 0) return;
-
-    const lastBlock = compactBlocks[compactBlocks.length - 1];
-    const code = lastBlock.getAttribute('data-code');
-    const lang = lastBlock.getAttribute('data-lang');
-
-    codePreviewLang.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
-    codePreviewCode.textContent = code;
-    codePreviewCode.className = 'language-' + lang;
-    Prism.highlightElement(codePreviewCode);
-
-    if (!codePanelUserClosed) {
-        mainEl.classList.add('has-code-panel');
-        codePreviewPanel.classList.add('visible');
-    }
-}
-
-function processAllCodeBlocks() {
-    const messages = document.querySelectorAll('#messages .message.assistant');
-    for (const message of messages) {
-        const textEl = message.querySelector('.message-text');
-        if (textEl) {
-            replaceCodeBlocksWithCompactButtons(textEl);
-        }
-    }
-    updateCodePanelFromCompactButtons();
-}
-
 function scrollToBottom() {
     requestAnimationFrame(() => {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        const chatContainer = document.getElementById('chat-container');
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
     });
 }
 
@@ -375,25 +247,22 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function updateTitle(convId, content) {
-    const conv = conversations.find(c => c.id === convId);
-    if (!conv) return;
-    const firstLine = content.split('\n')[0];
-    conv.title = firstLine.substring(0, 40) + (firstLine.length > 40 ? '...' : '');
-    saveConversations();
-    renderConversations();
-}
-
 function toggleThinking(btn) {
     btn.classList.toggle('open');
     const content = btn.nextElementSibling;
     content.classList.toggle('open');
 }
 
-function showTypingIndicator() {
+if (typeof window !== 'undefined') {
+    window.toggleThinking = toggleThinking;
+}
+
+function showTypingIndicator(messagesContainer) {
+    const welcomeScreen = document.getElementById('welcome-screen');
     if (welcomeScreen.style.display !== 'none') {
         welcomeScreen.style.display = 'none';
     }
+
     const messageEl = document.createElement('div');
     messageEl.className = 'message assistant typing';
     messageEl.id = 'typing-indicator';
@@ -416,8 +285,8 @@ function removeTypingIndicator() {
     if (indicator) indicator.remove();
 }
 
-function updateMessageContent(element, content) {
-    const textEl = element.querySelector('.message-text');
+function updateMessageContent(assistantEl, content, onScroll) {
+    const textEl = assistantEl.querySelector('.message-text');
     if (!textEl) return;
 
     const { thinkingHtml, contentHtml } = parseThinkingAndContent(content);
@@ -459,81 +328,20 @@ function updateMessageContent(element, content) {
         }
     }
 
-    scrollToBottom();
+    onScroll();
 }
 
-function buildRequestMessages() {
-    const conv = conversations.find(c => c.id === currentConversationId);
-    if (!conv) return [];
+// === api.js ===
+const decoder = new TextDecoder();
 
-    let messages = conv.messages.map(m => ({ role: m.role, content: m.content }));
+async function sendStreamingMessage(config, apiUrl, conversations, currentId, onComplete, onProgress, onError, onAbort, externalAbortController) {
+    const messages = buildRequestMessages(conversations, currentId, config);
+    const payload = buildRequestPayload(config, messages);
 
-    const systemPrompt = config.systemPrompt || '';
-    if (systemPrompt) {
-        messages.unshift({ role: 'system', content: systemPrompt });
-    }
-
-    return messages;
-}
-
-function buildRequestPayload(messages) {
-    const payload = {
-        model: config.model,
-        messages: messages,
-        stream: true,
-        temperature: config.temperature,
-        min_p: config.minP,
-        presence_penalty: config.presencePenalty,
-        repeat_penalty: config.repeatPenalty,
-        thinking_budget_tokens: config.thinkingBudget,
-        max_tokens: config.maxTokens,
-        chat_template_kwargs: {
-            enable_thinking: config.enableThinking,
-            preserve_thinking: false
-        }
-    };
-
-    return payload;
-}
-
-let isGenerating = false;
-let codePanelUserClosed = false;
-
-async function sendMessage() {
-    const text = messageInput.value.trim();
-    if (!text) return;
-
-    if (!currentConversationId) {
-        createConversation();
-    }
-
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
-    sendBtn.disabled = true;
-    sendBtn.classList.add('hidden');
-    stopBtn.classList.remove('hidden');
-
-    const conv = conversations.find(c => c.id === currentConversationId);
-    if (!conv) return;
-
-    conv.messages.push({ role: 'user', content: text });
-    if (conv.messages.length === 1) {
-        updateTitle(currentConversationId, text);
-    }
-    saveConversations();
-    appendMessage('user', text);
-
-    showTypingIndicator();
-
-    const messages = buildRequestMessages();
-    const payload = buildRequestPayload(messages);
-
-    isGenerating = true;
-
-    abortController = new AbortController();
+    const abortController = externalAbortController || new AbortController();
 
     try {
-        const response = await fetch(config.apiUrl, {
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -547,7 +355,6 @@ async function sendMessage() {
         removeTypingIndicator();
 
         const reader = response.body.getReader();
-        const decoder = new TextDecoder();
         let buffer = '';
         let normalContent = '';
         let assistantEl = null;
@@ -557,7 +364,6 @@ async function sendMessage() {
         let hasThinking = false;
         let hasContent = false;
         let tokenCount = 0;
-        let startTime = null;
         let firstTokenTime = null;
         let statsEl = null;
 
@@ -565,9 +371,8 @@ async function sendMessage() {
             const { done, value } = await reader.read();
             if (done) break;
 
-            if (!startTime) {
-                startTime = Date.now();
-                firstTokenTime = startTime;
+            if (!firstTokenTime) {
+                firstTokenTime = Date.now();
             }
 
             buffer += decoder.decode(value, { stream: true });
@@ -576,11 +381,11 @@ async function sendMessage() {
 
             for (const line of lines) {
                 const trimmed = line.trim();
-                if (!trimmed || trimmed === 'data: [DONE]') continue;
-                if (!trimmed.startsWith('data: ')) continue;
+                if (!trimmed || trimmed === STREAM_DONE_TOKEN) continue;
+                if (!trimmed.startsWith(STREAM_LINE_PREFIX)) continue;
 
                 try {
-                    const data = JSON.parse(trimmed.slice(6));
+                    const data = JSON.parse(trimmed.slice(STREAM_LINE_PREFIX.length));
                     const choice = data.choices?.[0];
                     if (!choice) continue;
 
@@ -588,42 +393,23 @@ async function sendMessage() {
                     const content = delta?.content;
                     const reasoning = delta?.reasoning;
 
-                    if (content) tokenCount += content.trim().split(/\s+/).filter(w => w).length;
-                    if (reasoning) tokenCount += reasoning.trim().split(/\s+/).filter(w => w).length;
+                    if (content) tokenCount += countTokens(content);
+                    if (reasoning) tokenCount += countTokens(reasoning);
 
                     if (!assistantEl) {
-                        assistantEl = appendMessage('assistant', '', false);
-                        statsEl = document.createElement('div');
-                        statsEl.className = 'message-stats';
-                        statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">0.0</span>`;
+                        assistantEl = appendMessage(document.getElementById('messages'), 'assistant', '', false);
+                        statsEl = createStatsElement(tokenCount);
                         const messageContent = assistantEl.querySelector('.message-content');
                         messageContent.appendChild(statsEl);
                     } else {
-                        const elapsed = (Date.now() - firstTokenTime) / 1000;
-                        const speed = elapsed > 0 ? (tokenCount / elapsed).toFixed(1) : '0.0';
-                        statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">${speed} tok/s</span>`;
+                        updateStatsElement(statsEl, tokenCount, firstTokenTime);
                     }
 
                     if (reasoning) {
                         hasThinking = true;
                         thinkingContent += reasoning;
                         if (!thinkingBlock) {
-                            const textEl = assistantEl.querySelector('.message-text');
-                            thinkingBlock = document.createElement('div');
-                            thinkingBlock.className = 'thinking-block';
-                            thinkingBlock.innerHTML = `
-                                <button class="thinking-toggle" onclick="toggleThinking(this)">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="9 18 15 12 9 6"></polyline>
-                                    </svg>
-                                    Thinking...
-                                </button>
-                                <div class="thinking-content">
-                                    <div class="message text-only"></div>
-                                </div>
-                            `;
-                            textEl.innerHTML = '';
-                            textEl.appendChild(thinkingBlock);
+                            thinkingBlock = createStreamingThinkingBlock(assistantEl);
                             thinkingContentEl = thinkingBlock.querySelector('.thinking-content .message.text-only');
                             thinkingBlock.querySelector('.thinking-toggle').classList.add('open');
                             thinkingBlock.querySelector('.thinking-content').classList.add('open');
@@ -638,265 +424,548 @@ async function sendMessage() {
                         hasContent = true;
                         normalContent += content;
                         if (hasThinking) {
-                            let contentDiv = assistantEl.querySelector('.thinking-block')
-                                ? assistantEl.querySelector('.thinking-block')?.nextElementSibling
-                                : null;
-                            if (!contentDiv) {
-                                contentDiv = document.createElement('div');
-                                contentDiv.className = 'message text-only';
-                                assistantEl.querySelector('.message-text').appendChild(contentDiv);
-                            }
+                            let contentDiv = findOrCreateContentDiv(assistantEl);
                             contentDiv.innerHTML = marked.parse(normalContent);
                         } else {
                             const textEl = assistantEl.querySelector('.message-text');
-                            if (textEl) {
-                                textEl.innerHTML = marked.parse(normalContent);
-                            }
+                            if (textEl) textEl.innerHTML = marked.parse(normalContent);
                         }
                         scrollToBottom();
-                        highlightAllCode();
+                        highlightAllCode(document.getElementById('messages'));
                     }
+
+                    onProgress({ tokenCount, hasThinking, hasContent });
                 } catch (e) {
                     // Skip malformed JSON
                 }
             }
         }
 
-        if (!assistantEl) {
-            appendMessage('assistant', '[No response received]');
-        }
+        finalizeMessage(assistantEl, normalContent, thinkingContent, tokenCount, firstTokenTime, statsEl);
 
-        const textEl = assistantEl.querySelector('.message-text');
-        const normalContentDiv = textEl?.querySelector(':scope > div.message.text-only');
-        if (normalContentDiv) {
-            normalContentDiv.innerHTML = marked.parse(normalContent);
-        } else if (textEl && normalContent) {
-            textEl.innerHTML = marked.parse(normalContent);
-        }
+        const fullContent = buildFullContent(thinkingContent, normalContent);
+        onComplete(fullContent);
 
-        highlightAllCode();
-        processAllCodeBlocks();
+        highlightAllCode(document.getElementById('messages'));
+        setupCopyButtonsOnCodeBlocks(document.getElementById('messages'), copyCodeToClipboard, null);
 
         if (statsEl && assistantEl) {
-            const totalTime = ((Date.now() - firstTokenTime) / 1000).toFixed(1);
-            const finalSpeed = tokenCount > 0 ? (tokenCount / ((Date.now() - firstTokenTime) / 1000)).toFixed(1) : '0.0';
-            statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">${finalSpeed} tok/s</span><span class="stats-item stats-time">${totalTime}s</span>`;
+            updateFinalStats(statsEl, tokenCount, firstTokenTime);
         }
-
-        let fullContent = normalContent;
-        if (thinkingContent) {
-            fullContent = `<thinking>\n${thinkingContent}\n</thinking>\n\n${normalContent}`;
-        }
-        conv.messages.push({ role: 'assistant', content: fullContent });
-        saveConversations();
 
     } catch (err) {
         removeTypingIndicator();
         if (err.name === 'AbortError') {
+            onAbort();
             return;
         }
         console.error('Request failed:', err);
-        appendMessage('assistant', `**Error:** ${err.message}`);
-    } finally {
-        abortController = null;
-        isGenerating = false;
-        sendBtn.disabled = false;
-        sendBtn.classList.remove('hidden');
-        stopBtn.classList.add('hidden');
-        messageInput.focus();
+        onError(err.message);
+    }
+
+    return abortController;
+}
+
+function countTokens(text) {
+    return text.trim().split(/\s+/).filter(w => w).length;
+}
+
+function createStatsElement(tokenCount) {
+    const statsEl = document.createElement('div');
+    statsEl.className = 'message-stats';
+    statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">0.0</span>`;
+    return statsEl;
+}
+
+function updateStatsElement(statsEl, tokenCount, firstTokenTime) {
+    const elapsed = (Date.now() - firstTokenTime) / 1000;
+    const speed = elapsed > 0 ? (tokenCount / elapsed).toFixed(1) : '0.0';
+    statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">${speed} tok/s</span>`;
+}
+
+function createStreamingThinkingBlock(assistantEl) {
+    const textEl = assistantEl.querySelector('.message-text');
+    const thinkingBlock = document.createElement('div');
+    thinkingBlock.className = 'thinking-block';
+    thinkingBlock.innerHTML = `
+        <button class="thinking-toggle" onclick="toggleThinking(this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+            Thinking...
+        </button>
+        <div class="thinking-content">
+            <div class="message text-only"></div>
+        </div>
+    `;
+    textEl.innerHTML = '';
+    textEl.appendChild(thinkingBlock);
+    return thinkingBlock;
+}
+
+function findOrCreateContentDiv(assistantEl) {
+    const existing = assistantEl.querySelector('.thinking-block')
+        ? assistantEl.querySelector('.thinking-block')?.nextElementSibling
+        : null;
+    if (!existing) {
+        const div = document.createElement('div');
+        div.className = 'message text-only';
+        assistantEl.querySelector('.message-text').appendChild(div);
+        return div;
+    }
+    return existing;
+}
+
+function finalizeMessage(assistantEl, normalContent, thinkingContent, tokenCount, firstTokenTime, statsEl) {
+    if (!assistantEl) {
+        appendMessage(document.getElementById('messages'), 'assistant', '[No response received]');
+        return;
+    }
+
+    const textEl = assistantEl.querySelector('.message-text');
+    const normalContentDiv = textEl?.querySelector(':scope > div.message.text-only');
+    if (normalContentDiv) {
+        normalContentDiv.innerHTML = marked.parse(normalContent);
+    } else if (textEl && normalContent) {
+        textEl.innerHTML = marked.parse(normalContent);
     }
 }
 
-function stopGeneration() {
-    if (abortController) {
-        abortController.abort();
+function buildFullContent(thinkingContent, normalContent) {
+    if (thinkingContent) {
+        return `<thinking>\n${thinkingContent}\n</thinking>\n\n${normalContent}`;
+    }
+    return normalContent;
+}
+
+function updateFinalStats(statsEl, tokenCount, firstTokenTime) {
+    const totalTime = ((Date.now() - firstTokenTime) / 1000).toFixed(1);
+    const finalSpeed = tokenCount > 0 ? (tokenCount / ((Date.now() - firstTokenTime) / 1000)).toFixed(1) : '0.0';
+    statsEl.innerHTML = `<span class="stats-item stats-tokens">${tokenCount} tokens</span><span class="stats-item stats-speed">${finalSpeed} tok/s</span><span class="stats-item stats-time">${totalTime}s</span>`;
+}
+
+function wrapCodeBlocksWithActions(textEl, onCopy, onOpen) {
+    const codeBlocks = textEl.querySelectorAll('pre:has(code[class*="language-"])');
+    for (const pre of codeBlocks) {
+        if (pre.closest('.thinking-block')) continue;
+        if (pre.querySelector('.code-block-actions')) continue;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+
+        const actions = document.createElement('div');
+        actions.className = 'code-block-actions';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-code-btn';
+        copyBtn.title = 'Copy code';
+        copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>`;
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const code = pre.querySelector('code').textContent;
+            onCopy(code, copyBtn);
+        });
+
+        actions.appendChild(copyBtn);
+        wrapper.appendChild(actions);
     }
 }
 
-function setupEventListeners() {
-    newChatBtn.addEventListener('click', createConversation);
+function setupCopyButtonsOnCodeBlocks(messagesContainer, onCopy, onOpen) {
+    const textEls = messagesContainer.querySelectorAll('.message-text, .thinking-content .message.text-only, :scope > div.message.text-only');
+    for (const textEl of textEls) {
+        wrapCodeBlocksWithActions(textEl, onCopy, onOpen);
+    }
+}
 
-    thinkingToggleBtn.addEventListener('click', () => {
-        config.enableThinking = !config.enableThinking;
-        saveConfig();
-        updateThinkingToggleVisual();
+function copyCodeToClipboard(code, btn) {
+    navigator.clipboard.writeText(code).then(() => {
+        btn.classList.add('copied');
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>`;
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>`;
+        }, 2000);
     });
+}
 
-    sendBtn.addEventListener('click', () => {
-        if (messageInput.value.trim() && !sendBtn.disabled) sendMessage();
-    });
+function buildRequestMessages(conversations, currentId, config) {
+    const conv = conversations.find(c => c.id === currentId);
+    if (!conv) return [];
 
-    stopBtn.addEventListener('click', stopGeneration);
+    let messages = conv.messages.map(m => ({ role: m.role, content: m.content }));
 
-    messageInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            if (!sendBtn.disabled) sendMessage();
+    if (config.systemPrompt) {
+        messages.unshift({ role: 'system', content: config.systemPrompt });
+    }
+
+    return messages;
+}
+
+function buildRequestPayload(config, messages) {
+    return {
+        model: config.model,
+        messages: messages,
+        stream: true,
+        temperature: config.temperature,
+        min_p: config.minP,
+        presence_penalty: config.presencePenalty,
+        repeat_penalty: config.repeatPenalty,
+        thinking_budget_tokens: config.thinkingBudget,
+        max_tokens: config.maxTokens,
+        chat_template_kwargs: {
+            enable_thinking: config.enableThinking,
+            preserve_thinking: false
         }
-    });
+    };
+}
 
-    messageInput.addEventListener('input', () => {
-        messageInput.style.height = 'auto';
-        messageInput.style.height = Math.min(messageInput.scrollHeight, 200) + 'px';
-        sendBtn.disabled = !messageInput.value.trim();
-    });
+// === ui.js ===
+function setupSidebar() {
+    const sidebar = document.getElementById(DOM_IDS.sidebar);
+    const overlay = document.getElementById(DOM_IDS.sidebarOverlay);
+    const toggle = document.getElementById(DOM_IDS.sidebarToggle);
 
-    sidebarToggle.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
+    toggle.addEventListener('click', () => {
+        if (window.innerWidth <= UI.MOBILE_BREAKPOINT) {
             sidebar.classList.toggle('open');
-            sidebarOverlay.classList.toggle('visible');
+            overlay.classList.toggle('visible');
         } else {
             sidebar.classList.toggle('collapsed');
         }
     });
 
-    sidebarOverlay.addEventListener('click', closeSidebar);
-
-    settingsBtn.addEventListener('click', () => {
-        settingsOverlay.classList.remove('hidden');
-    });
-
-    closeSettingsBtn.addEventListener('click', () => {
-        settingsOverlay.classList.add('hidden');
-    });
-
-    saveSettingsBtn.addEventListener('click', () => {
-        config.apiUrl = document.getElementById('setting-api-url').value || DEFAULT_CONFIG.apiUrl;
-        config.systemPrompt = document.getElementById('setting-system-prompt').value;
-        config.temperature = parseFloat(document.getElementById('setting-temperature').value) || DEFAULT_CONFIG.temperature;
-        config.minP = parseFloat(document.getElementById('setting-min-p').value) || DEFAULT_CONFIG.minP;
-        config.presencePenalty = parseFloat(document.getElementById('setting-presence-penalty').value) || DEFAULT_CONFIG.presencePenalty;
-        config.repeatPenalty = parseFloat(document.getElementById('setting-repeat-penalty').value) || DEFAULT_CONFIG.repeatPenalty;
-        config.thinkingBudget = parseInt(document.getElementById('setting-thinking-budget').value) || DEFAULT_CONFIG.thinkingBudget;
-        config.model = document.getElementById('setting-model').value || DEFAULT_CONFIG.model;
-        config.maxTokens = parseInt(document.getElementById('setting-max-tokens').value) || DEFAULT_CONFIG.maxTokens;
-        saveConfig();
-        updateThinkingToggleVisual();
-        settingsOverlay.classList.add('hidden');
-    });
-
-    settingsOverlay.addEventListener('click', (e) => {
-        if (e.target === settingsOverlay) {
-            settingsOverlay.classList.add('hidden');
-        }
-    });
+    overlay.addEventListener('click', closeSidebar);
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            settingsOverlay.classList.add('hidden');
-            if (window.innerWidth <= 768) closeSidebar();
+            if (window.innerWidth <= UI.MOBILE_BREAKPOINT) {
+                closeSidebar();
+            }
         }
     });
 }
 
 function closeSidebar() {
-    sidebar.classList.remove('open');
-    sidebarOverlay.classList.remove('visible');
+    const sidebar = document.getElementById(DOM_IDS.sidebar);
+    const overlay = document.getElementById(DOM_IDS.sidebarOverlay);
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('visible');
 }
 
-function updateThinkingToggleVisual() {
-    thinkingToggleBtn.classList.toggle('active', config.enableThinking !== false);
-}
+function setupSettings(config, onSave) {
+    const overlay = document.getElementById(DOM_IDS.settingsOverlay);
+    const openBtn = document.getElementById(DOM_IDS.settingsBtn);
+    const closeBtn = document.getElementById(DOM_IDS.closeSettings);
+    const saveBtn = document.getElementById(DOM_IDS.saveSettings);
 
-function loadSettings() {
-    document.getElementById('setting-api-url').value = config.apiUrl || '';
-    document.getElementById('setting-system-prompt').value = config.systemPrompt || '';
-    document.getElementById('setting-temperature').value = config.temperature ?? '';
-    document.getElementById('setting-min-p').value = config.minP ?? '';
-    document.getElementById('setting-presence-penalty').value = config.presencePenalty ?? '';
-    document.getElementById('setting-repeat-penalty').value = config.repeatPenalty ?? '';
-    document.getElementById('setting-thinking-budget').value = config.thinkingBudget ?? '';
-    document.getElementById('setting-model').value = config.model || '';
-    document.getElementById('setting-max-tokens').value = config.maxTokens ?? '';
-}
-
-function closeCodePreviewPanel() {
-    if (!codePreviewPanel) return;
-    codePreviewPanel.classList.remove('visible');
-    mainEl.classList.remove('has-code-panel');
-    codePanelUserClosed = true;
-}
-
-function setupCodePreviewPanel() {
-    if (!codePreviewPanel) return;
-
-    codePreviewClose.addEventListener('click', () => {
-        closeCodePreviewPanel();
+    openBtn.addEventListener('click', () => {
+        overlay.classList.remove('hidden');
     });
 
-    codePreviewCopy.addEventListener('click', () => {
-        const code = codePreviewCode.textContent;
-        navigator.clipboard.writeText(code).then(() => {
-            const originalText = codePreviewCopy.textContent;
-            codePreviewCopy.textContent = 'Copied!';
-            codePreviewCopy.style.background = 'var(--color-primary)';
-            setTimeout(() => {
-                codePreviewCopy.textContent = originalText;
-                codePreviewCopy.style.background = '';
-            }, 1500);
-        });
+    closeBtn.addEventListener('click', () => {
+        overlay.classList.add('hidden');
     });
 
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            if (mutation.type === 'childList' && (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)) {
-                checkForCodeBlocks();
-            } else if (mutation.type === 'characterData' && mutation.target.parentElement) {
-                checkForCodeBlocks();
-            }
+    saveBtn.addEventListener('click', () => {
+        config.apiUrl = document.getElementById(SETTINGS_FIELDS.apiUrl).value || config.apiUrl;
+        config.systemPrompt = document.getElementById(SETTINGS_FIELDS.systemPrompt).value;
+        config.temperature = parseFloat(document.getElementById(SETTINGS_FIELDS.temperature).value) || config.temperature;
+        config.minP = parseFloat(document.getElementById(SETTINGS_FIELDS.minP).value) || config.minP;
+        config.presencePenalty = parseFloat(document.getElementById(SETTINGS_FIELDS.presencePenalty).value) || config.presencePenalty;
+        config.repeatPenalty = parseFloat(document.getElementById(SETTINGS_FIELDS.repeatPenalty).value) || config.repeatPenalty;
+        config.thinkingBudget = parseInt(document.getElementById(SETTINGS_FIELDS.thinkingBudget).value) || config.thinkingBudget;
+        config.model = document.getElementById(SETTINGS_FIELDS.model).value || config.model;
+        config.maxTokens = parseInt(document.getElementById(SETTINGS_FIELDS.maxTokens).value) || config.maxTokens;
+        onSave(config);
+        overlay.classList.add('hidden');
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.classList.add('hidden');
         }
     });
-
-    observer.observe(messagesContainer, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
 }
 
-function checkForCodeBlocks() {
-    if (!codePreviewPanel) return;
+function loadSettingsIntoUI(config) {
+    document.getElementById(SETTINGS_FIELDS.apiUrl).value = config.apiUrl || '';
+    document.getElementById(SETTINGS_FIELDS.systemPrompt).value = config.systemPrompt || '';
+    document.getElementById(SETTINGS_FIELDS.temperature).value = config.temperature ?? '';
+    document.getElementById(SETTINGS_FIELDS.minP).value = config.minP ?? '';
+    document.getElementById(SETTINGS_FIELDS.presencePenalty).value = config.presencePenalty ?? '';
+    document.getElementById(SETTINGS_FIELDS.repeatPenalty).value = config.repeatPenalty ?? '';
+    document.getElementById(SETTINGS_FIELDS.thinkingBudget).value = config.thinkingBudget ?? '';
+    document.getElementById(SETTINGS_FIELDS.model).value = config.model || '';
+    document.getElementById(SETTINGS_FIELDS.maxTokens).value = config.maxTokens ?? '';
+}
 
-    const messages = document.querySelectorAll('#messages .message.assistant');
-    if (messages.length === 0) return;
+function updateThinkingToggleVisual(thinkingToggleBtn, enableThinking) {
+    thinkingToggleBtn.classList.toggle('active', enableThinking !== false);
+}
 
-    let target = null;
+function setupInputAutoResize(messageInput, sendBtn) {
+    messageInput.addEventListener('input', () => {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = Math.min(messageInput.scrollHeight, UI.MAX_INPUT_HEIGHT) + 'px';
+        sendBtn.disabled = !messageInput.value.trim();
+    });
+}
 
-    for (const message of messages) {
-        const textEl = message.querySelector('.message-text');
-        if (!textEl) continue;
+function isMobile() {
+    return window.innerWidth <= UI.MOBILE_BREAKPOINT;
+}
 
-        const thinkingBlock = textEl.querySelector('.thinking-block');
+// === app.js (orchestrator) ===
+let state = {
+    config: loadConfig(),
+    conversations: loadConversations(),
+    currentConversationId: null,
+    isGenerating: false
+};
 
-        const allCode = textEl.querySelectorAll('pre code[class*="language-"]');
-        let codeElements = [];
-        for (const el of allCode) {
-            if (thinkingBlock && el.closest('.thinking-block')) {
-                continue;
-            }
-            codeElements.push(el);
+const els = {};
+function cacheEl(id) {
+    const el = document.getElementById(id);
+    if (el) els[id] = el;
+    return el;
+}
+
+function initDOM() {
+    cacheEl(DOM_IDS.sidebar);
+    cacheEl(DOM_IDS.conversationsList);
+    cacheEl(DOM_IDS.newChatBtn);
+    cacheEl(DOM_IDS.messages);
+    cacheEl(DOM_IDS.welcomeScreen);
+    cacheEl(DOM_IDS.messageInput);
+    cacheEl(DOM_IDS.sendBtn);
+    cacheEl(DOM_IDS.stopBtn);
+    cacheEl(DOM_IDS.thinkingToggleBtn);
+    cacheEl(DOM_IDS.chatContainer);
+    cacheEl(DOM_IDS.main);
+    cacheEl(DOM_IDS.sidebarToggle);
+    cacheEl(DOM_IDS.settingsBtn);
+    cacheEl(DOM_IDS.settingsOverlay);
+    cacheEl(DOM_IDS.closeSettings);
+    cacheEl(DOM_IDS.saveSettings);
+    cacheEl(DOM_IDS.sidebarOverlay);
+
+    if (!els[DOM_IDS.sidebarOverlay]) {
+        const overlay = document.createElement('div');
+        overlay.id = DOM_IDS.sidebarOverlay;
+        document.body.appendChild(overlay);
+        els[DOM_IDS.sidebarOverlay] = overlay;
+    }
+}
+
+function createNewConversation() {
+    const conv = {
+        id: generateId(),
+        title: 'New Chat',
+        messages: [],
+        createdAt: Date.now()
+    };
+    state.conversations.unshift(conv);
+    saveConversations(state.conversations);
+    selectConversation(conv.id);
+    renderConversationsUI();
+    els[DOM_IDS.messageInput].focus();
+}
+
+function selectConversation(id) {
+    state.currentConversationId = id;
+    const conv = state.conversations.find(c => c.id === id);
+    if (!conv) return;
+
+    els[DOM_IDS.welcomeScreen].style.display = 'none';
+    renderMessages(els[DOM_IDS.messages], conv.messages,
+        () => {},
+        () => {},
+        copyCodeToClipboard,
+        null
+    );
+    renderConversationsUI();
+
+    if (isMobile()) {
+        closeSidebar();
+    }
+}
+
+function handleDeleteConversation(id) {
+    const wasCurrent = state.currentConversationId === id;
+    state.conversations = state.conversations.filter(c => c.id !== id);
+
+    saveConversations(state.conversations);
+
+    if (wasCurrent) {
+        if (state.conversations.length > 0) {
+            state.currentConversationId = state.conversations[0].id;
+        } else {
+            state.currentConversationId = null;
+            els[DOM_IDS.messages].innerHTML = '';
+            els[DOM_IDS.welcomeScreen].style.display = 'flex';
         }
-
-        for (let i = codeElements.length - 1; i >= 0; i--) {
-            const el = codeElements[i];
-            const langMatch = el.className.match(/language-(\w+)/);
-            if (langMatch && !el.closest('.compact-code-block')) {
-                target = el;
-                break;
-            }
+    }
+    renderConversationsUI();
+    if (state.currentConversationId) {
+        const conv = state.conversations.find(c => c.id === state.currentConversationId);
+        if (conv) {
+            els[DOM_IDS.welcomeScreen].style.display = 'none';
+            renderMessages(els[DOM_IDS.messages], conv.messages,
+                () => {},
+                () => {},
+                copyCodeToClipboard,
+                null
+            );
         }
-        if (target) break;
+    }
+}
+
+function handleTitleUpdate(convId, content) {
+    const conv = state.conversations.find(c => c.id === convId);
+    if (!conv) return;
+    const firstLine = content.split('\n')[0];
+    conv.title = firstLine.substring(0, UI.TITLE_MAX_LENGTH) + (firstLine.length > UI.TITLE_MAX_LENGTH ? '...' : '');
+    saveConversations();
+    renderConversationsUI();
+}
+
+async function sendMessage() {
+    const text = els[DOM_IDS.messageInput].value.trim();
+    if (!text || state.isGenerating) return;
+
+    if (!state.currentConversationId) {
+        createNewConversation();
     }
 
-    if (!target) return;
+    els[DOM_IDS.messageInput].value = '';
+    els[DOM_IDS.messageInput].style.height = 'auto';
+    els[DOM_IDS.sendBtn].disabled = true;
+    els[DOM_IDS.sendBtn].classList.add('hidden');
+    els[DOM_IDS.stopBtn].classList.remove('hidden');
 
-    const langMatch = target.className.match(/language-(\w+)/);
-    const lang = langMatch ? langMatch[1] : 'text';
+    const conv = state.conversations.find(c => c.id === state.currentConversationId);
+    if (!conv) return;
 
-    codePreviewLang.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
-    codePreviewCode.textContent = target.textContent;
-    codePreviewCode.className = 'language-' + lang;
-    Prism.highlightElement(codePreviewCode);
+    conv.messages.push({ role: 'user', content: text });
+    if (conv.messages.length === 1) {
+        handleTitleUpdate(state.currentConversationId, text);
+    }
+    saveConversations();
+    appendMessage(els[DOM_IDS.messages], 'user', text);
 
-    if (isGenerating && !codePanelUserClosed) {
-        mainEl.classList.add('has-code-panel');
-        codePreviewPanel.classList.add('visible');
+    showTypingIndicator(els[DOM_IDS.messages]);
+
+    state.isGenerating = true;
+
+    const abortController = new AbortController();
+    state.abortController = abortController;
+
+    sendStreamingMessage(
+        state.config,
+        state.config.apiUrl,
+        state.conversations,
+        state.currentConversationId,
+        (fullContent) => {
+            state.abortController = null;
+            conv.messages.push({ role: 'assistant', content: fullContent });
+            saveConversations();
+            finishGeneration();
+        },
+        () => {},
+        (errorMsg) => {
+            appendMessage(els[DOM_IDS.messages], 'assistant', `**Error:** ${errorMsg}`);
+            finishGeneration();
+        },
+        () => {
+            finishGeneration();
+        },
+        abortController
+    );
+}
+
+function finishGeneration() {
+    state.isGenerating = false;
+    els[DOM_IDS.sendBtn].disabled = false;
+    els[DOM_IDS.sendBtn].classList.remove('hidden');
+    els[DOM_IDS.stopBtn].classList.add('hidden');
+    els[DOM_IDS.messageInput].focus();
+}
+
+function stopGeneration() {
+    state.abortController?.abort();
+    saveConversations();
+    finishGeneration();
+}
+
+function renderConversationsUI() {
+    renderConversations(
+        state.conversations,
+        state.currentConversationId,
+        (id) => selectConversation(id),
+        (id, e) => { e.stopPropagation(); handleDeleteConversation(id); }
+    );
+}
+
+function setupEventListeners() {
+    els[DOM_IDS.newChatBtn].addEventListener('click', createNewConversation);
+
+    els[DOM_IDS.thinkingToggleBtn].addEventListener('click', () => {
+        state.config.enableThinking = !state.config.enableThinking;
+        saveConfig(state.config);
+        updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
+    });
+
+    els[DOM_IDS.sendBtn].addEventListener('click', sendMessage);
+    els[DOM_IDS.stopBtn].addEventListener('click', stopGeneration);
+
+    els[DOM_IDS.messageInput].addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!els[DOM_IDS.sendBtn].disabled) sendMessage();
+        }
+    });
+
+    setupInputAutoResize(els[DOM_IDS.messageInput], els[DOM_IDS.sendBtn]);
+
+    setupSidebar();
+
+    setupSettings(state.config, (savedConfig) => {
+        state.config = savedConfig;
+        saveConfig(state.config);
+        updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            els[DOM_IDS.settingsOverlay].classList.add('hidden');
+        }
+    });
+}
+
+function init() {
+    initDOM();
+    renderConversationsUI();
+    loadLastConversation();
+    setupEventListeners();
+    loadSettingsIntoUI(state.config);
+    updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
+    els[DOM_IDS.messageInput].focus();
+}
+
+function loadLastConversation() {
+    if (state.conversations.length > 0) {
+        selectConversation(state.conversations[state.conversations.length - 1].id);
     }
 }
 
