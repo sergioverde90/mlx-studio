@@ -50,12 +50,6 @@ const codePreviewClose = document.getElementById('code-preview-close');
 
 // Configure marked
 marked.setOptions({
-    highlight: function(code, lang) {
-        if (lang && hljs.getLanguage(lang)) {
-            return hljs.highlight(code, { language: lang }).value;
-        }
-        return hljs.highlightAuto(code).value;
-    },
     breaks: true,
     gfm: true
 });
@@ -174,6 +168,8 @@ function renderMessages(messages) {
     messages.forEach(msg => {
         appendMessage(msg.role, msg.content, false);
     });
+    highlightAllCode();
+    processAllCodeBlocks();
     scrollToBottom();
 }
 
@@ -240,6 +236,114 @@ function appendMessage(role, content, animate = true) {
     return messageEl;
 }
 
+function highlightAllCode() {
+    const blocks = messagesContainer.querySelectorAll('pre code[class*="language-"]');
+    for (const block of blocks) {
+        if (!block.closest('.thinking-block')) {
+            hljs.highlightElement(block);
+        }
+    }
+}
+
+function createCompactCodeButton(code, lang) {
+    const lines = code.trim().split('\n');
+    const previewLines = lines.slice(0, 2).join('\n');
+    const displayCode = lines.length > 2
+        ? previewLines + '\n' + lines[2].substring(0, 60) + (lines[2].length > 60 ? '…' : '')
+        : code;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'compact-code-block';
+    wrapper.setAttribute('data-code', code);
+    wrapper.setAttribute('data-lang', lang);
+
+    const langLabel = lang.charAt(0).toUpperCase() + lang.slice(1);
+
+    wrapper.innerHTML = `
+        <div class="compact-code-header">
+            <span class="compact-code-lang">${langLabel}</span>
+            <span class="compact-code-lines">${lines.length} lines</span>
+        </div>
+        <pre><code class="language-${lang}">${escapeHtml(displayCode)}</code></pre>
+        <button class="compact-code-btn" title="Load full code in preview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+            Load in Preview
+        </button>
+    `;
+
+    const btn = wrapper.querySelector('.compact-code-btn');
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        codePanelUserClosed = false;
+        codePreviewLang.textContent = langLabel;
+        codePreviewCode.textContent = code;
+        codePreviewCode.className = 'language-' + lang;
+        Prism.highlightElement(codePreviewCode);
+        mainEl.classList.add('has-code-panel');
+        codePreviewPanel.classList.add('visible');
+    });
+
+    return wrapper;
+}
+
+function replaceCodeBlocksWithCompactButtons(textEl) {
+    const codeBlocks = textEl.querySelectorAll('pre:has(code[class*="language-"])');
+    for (const pre of codeBlocks) {
+        if (pre.closest('.thinking-block')) continue;
+        if (pre.classList.contains('compact-code-block')) continue;
+
+        const codeEl = pre.querySelector('code');
+        const lMatch = codeEl.className.match(/language-(\w+)/);
+        const lang = lMatch ? lMatch[1] : 'text';
+        const code = codeEl.textContent;
+
+        const compactBtn = createCompactCodeButton(code, lang);
+        pre.replaceWith(compactBtn);
+    }
+}
+
+function updateCodePanelFromCompactButtons() {
+    if (!codePreviewPanel) return;
+    const compactBlocks = document.querySelectorAll('#messages .compact-code-block');
+    if (compactBlocks.length === 0) return;
+
+    const lastBlock = compactBlocks[compactBlocks.length - 1];
+    const code = lastBlock.getAttribute('data-code');
+    const lang = lastBlock.getAttribute('data-lang');
+
+    codePreviewLang.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+    codePreviewCode.textContent = code;
+    codePreviewCode.className = 'language-' + lang;
+    Prism.highlightElement(codePreviewCode);
+
+    if (!codePanelUserClosed) {
+        mainEl.classList.add('has-code-panel');
+        codePreviewPanel.classList.add('visible');
+    }
+}
+
+function processAllCodeBlocks() {
+    const messages = document.querySelectorAll('#messages .message.assistant');
+    for (const message of messages) {
+        const textEl = message.querySelector('.message-text');
+        if (textEl) {
+            replaceCodeBlocksWithCompactButtons(textEl);
+        }
+    }
+    updateCodePanelFromCompactButtons();
+}
+
+function scrollToBottom() {
+    requestAnimationFrame(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    });
+}
+
 function parseThinkingAndContent(content) {
     const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/gi;
     let thinkingParts = [];
@@ -265,10 +369,10 @@ function parseThinkingAndContent(content) {
     };
 }
 
-function scrollToBottom() {
-    requestAnimationFrame(() => {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    });
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function updateTitle(convId, content) {
@@ -278,12 +382,6 @@ function updateTitle(convId, content) {
     conv.title = firstLine.substring(0, 40) + (firstLine.length > 40 ? '...' : '');
     saveConversations();
     renderConversations();
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function toggleThinking(btn) {
@@ -399,6 +497,7 @@ function buildRequestPayload(messages) {
 }
 
 let isGenerating = false;
+let codePanelUserClosed = false;
 
 async function sendMessage() {
     const text = messageInput.value.trim();
@@ -555,7 +654,7 @@ async function sendMessage() {
                             }
                         }
                         scrollToBottom();
-                        setTimeout(() => checkForCodeBlocks(), 100);
+                        highlightAllCode();
                     }
                 } catch (e) {
                     // Skip malformed JSON
@@ -575,7 +674,8 @@ async function sendMessage() {
             textEl.innerHTML = marked.parse(normalContent);
         }
 
-        setTimeout(() => checkForCodeBlocks(), 50);
+        highlightAllCode();
+        processAllCodeBlocks();
 
         if (statsEl && assistantEl) {
             const totalTime = ((Date.now() - firstTokenTime) / 1000).toFixed(1);
@@ -714,6 +814,7 @@ function closeCodePreviewPanel() {
     if (!codePreviewPanel) return;
     codePreviewPanel.classList.remove('visible');
     mainEl.classList.remove('has-code-panel');
+    codePanelUserClosed = true;
 }
 
 function setupCodePreviewPanel() {
@@ -751,19 +852,18 @@ function setupCodePreviewPanel() {
 
 function checkForCodeBlocks() {
     if (!codePreviewPanel) return;
-    
+
     const messages = document.querySelectorAll('#messages .message.assistant');
     if (messages.length === 0) return;
-    const lastMessage = messages[messages.length - 1];
-    
+
     let target = null;
-    
+
     for (const message of messages) {
         const textEl = message.querySelector('.message-text');
         if (!textEl) continue;
-        
+
         const thinkingBlock = textEl.querySelector('.thinking-block');
-        
+
         const allCode = textEl.querySelectorAll('pre code[class*="language-"]');
         let codeElements = [];
         for (const el of allCode) {
@@ -773,21 +873,18 @@ function checkForCodeBlocks() {
             codeElements.push(el);
         }
 
-        
         for (let i = codeElements.length - 1; i >= 0; i--) {
             const el = codeElements[i];
             const langMatch = el.className.match(/language-(\w+)/);
-            if (langMatch && !el.closest('[data-previewed]')) {
+            if (langMatch && !el.closest('.compact-code-block')) {
                 target = el;
                 break;
             }
         }
         if (target) break;
     }
-    
-    if (!target) return;
 
-    const parentPre = target.closest('pre');
+    if (!target) return;
 
     const langMatch = target.className.match(/language-(\w+)/);
     const lang = langMatch ? langMatch[1] : 'text';
@@ -797,97 +894,10 @@ function checkForCodeBlocks() {
     codePreviewCode.className = 'language-' + lang;
     Prism.highlightElement(codePreviewCode);
 
-    if (parentPre) parentPre.dataset.previewed = 'true';
-
-    if (isGenerating) {
+    if (isGenerating && !codePanelUserClosed) {
         mainEl.classList.add('has-code-panel');
         codePreviewPanel.classList.add('visible');
     }
-
-    const textEl = lastMessage.querySelector('.message-text');
-    if (textEl) {
-        const allCodeBlocks = textEl.querySelectorAll('pre:has(code[class*="language-"])');
-        for (const pre of allCodeBlocks) {
-            if (!pre.querySelector('.open-code-btn')) {
-                const codeEl = pre.querySelector('code');
-                const lMatch = codeEl.className.match(/language-(\w+)/);
-                const l = lMatch ? lMatch[1] : 'text';
-                const c = codeEl.textContent;
-
-                const lines = c.trim().split('\n').length;
-                const isShell = ['bash', 'sh', 'shell', 'zsh'].includes(l);
-
-                const hasOpenBtn = lines > 1 && !isShell;
-                const hasCopyBtn = isShell;
-
-                if (hasOpenBtn || hasCopyBtn) {
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'code-block-actions';
-
-                    if (hasOpenBtn) {
-                        const btn = document.createElement('button');
-                        btn.className = 'open-code-btn';
-                        btn.title = 'Load code';
-                        btn.innerHTML = `
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="15 3 21 3 21 9"></polyline>
-                                <polyline points="9 21 3 21 3 15"></polyline>
-                                <line x1="21" y1="3" x2="14" y2="10"></line>
-                                <line x1="3" y1="21" x2="10" y2="14"></line>
-                            </svg>
-                        `;
-                        btn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            codePreviewLang.textContent = l.charAt(0).toUpperCase() + l.slice(1);
-                            codePreviewCode.textContent = c;
-                            codePreviewCode.className = 'language-' + l;
-                            Prism.highlightElement(codePreviewCode);
-                            mainEl.classList.add('has-code-panel');
-                            codePreviewPanel.classList.add('visible');
-                            pre.dataset.previewed = 'true';
-                        });
-                        wrapper.appendChild(btn);
-                    }
-
-                    if (hasCopyBtn) {
-                        const copyBtn = document.createElement('button');
-                        copyBtn.className = 'copy-code-btn';
-                        copyBtn.title = 'Copy to clipboard';
-                        copyBtn.innerHTML = `
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                            </svg>
-                        `;
-                        copyBtn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            navigator.clipboard.writeText(c).then(() => {
-                                copyBtn.classList.add('copied');
-                                copyBtn.innerHTML = `
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="20 6 9 17 4 12"></polyline>
-                                    </svg>
-                                `;
-                                setTimeout(() => {
-                                    copyBtn.classList.remove('copied');
-                                    copyBtn.innerHTML = `
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                        </svg>
-                                    `;
-                                }, 1500);
-                            });
-                        });
-                        wrapper.appendChild(copyBtn);
-                    }
-
-                    pre.appendChild(wrapper);
-                }
-            }
-        }
-    }
-
 }
 
 init();
