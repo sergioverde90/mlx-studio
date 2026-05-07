@@ -425,6 +425,8 @@ body::after {
     flex: 1;
     min-width: 0;
     padding-left: 4px;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Message stats */
@@ -474,6 +476,40 @@ body::after {
     font-size: 14.5px;
     line-height: 1.65;
     border: 1px solid var(--border-subtle);
+    display: inline-block;
+    max-width: calc(100% - 28px);
+}
+
+.resend-btn {
+    display: block;
+    padding: 2px 8px;
+    margin-top: 8px;
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all var(--transition);
+    border-radius: 4px;
+    opacity: 0;
+    margin-left: auto;
+}
+
+.message.user:hover .resend-btn {
+    opacity: 1;
+}
+
+.resend-btn:hover {
+    color: var(--accent);
+}
+
+.resend-btn:active {
+    transform: scale(0.96);
+}
+
+.resend-btn svg {
+    flex-shrink: 0;
 }
 
 /* === Markdown Typography === */

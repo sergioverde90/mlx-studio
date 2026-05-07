@@ -140,10 +140,12 @@ function appendMessage(container, role, content, animate = true) {
     if (!animate) messageEl.style.animation = 'none';
 
     const avatarText = role === 'user' ? 'U' : 'T';
+    messageEl.dataset.index = container.querySelectorAll('.message.user').length;
     messageEl.innerHTML = `
         <div class="message-avatar">${avatarText}</div>
         <div class="message-content">
             <div class="message-text"></div>
+            <button class="resend-btn" title="Resend"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Retry</button>
         </div>
     `;
 
@@ -938,7 +940,28 @@ function setupEventListeners() {
 
     setupInputAutoResize(els[DOM_IDS.messageInput], els[DOM_IDS.sendBtn]);
 
-    setupSidebar();
+    document.getElementById('messages').addEventListener('click', (e) => {
+        const btn = e.target.closest('.resend-btn');
+        if (!btn || state.isGenerating) return;
+        const messageEl = btn.closest('.message.user');
+        if (!messageEl) return;
+        const conv = state.conversations.find(c => c.id === state.currentConversationId);
+        if (!conv) return;
+
+        let userIndex = parseInt(messageEl.dataset.index, 10);
+        if (isNaN(userIndex)) return;
+
+        const resendMsg = conv.messages[userIndex];
+        if (!resendMsg) return;
+
+        conv.messages = conv.messages.slice(0, userIndex);
+        saveConversations();
+        removeTypingIndicator();
+        els[DOM_IDS.messageInput].value = resendMsg.content;
+        els[DOM_IDS.messageInput].dispatchEvent(new Event('input'));
+        els[DOM_IDS.messageInput].focus();
+        requestAnimationFrame(() => sendMessage());
+    });
 
     setupSettings(state.config, (savedConfig) => {
         state.config = savedConfig;
