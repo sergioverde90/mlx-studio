@@ -384,10 +384,18 @@ async function sendStreamingMessage(config, apiUrl, conversations, currentId, on
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed || trimmed === STREAM_DONE_TOKEN) continue;
-                if (!trimmed.startsWith(STREAM_LINE_PREFIX)) continue;
+
+                let jsonStr = trimmed;
+                if (trimmed.startsWith('data: ')) {
+                    jsonStr = trimmed.slice(6);
+                } else if (trimmed.startsWith('data:')) {
+                    jsonStr = trimmed.slice(5);
+                } else {
+                    continue;
+                }
 
                 try {
-                    const data = JSON.parse(trimmed.slice(STREAM_LINE_PREFIX.length));
+                    const data = JSON.parse(jsonStr.trim());
                     const choice = data.choices?.[0];
                     if (!choice) continue;
 
@@ -980,6 +988,7 @@ function init() {
     initDOM();
     renderConversationsUI();
     loadLastConversation();
+    setupSidebar();
     setupEventListeners();
     loadSettingsIntoUI(state.config);
     updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);

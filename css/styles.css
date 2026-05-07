@@ -1131,8 +1131,11 @@ body::after {
         top: 0;
         left: 0;
         bottom: 0;
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-width);
         transform: translateX(-100%);
         box-shadow: none;
+        transition: transform var(--transition-slow);
     }
 
     #sidebar.open {
@@ -1141,6 +1144,8 @@ body::after {
 
     #sidebar.collapsed {
         transform: translateX(-100%);
+        width: 0;
+        min-width: 0;
     }
 
     #messages {
@@ -1169,8 +1174,16 @@ body::after {
 }
 
 @media (max-width: 768px) {
+    #sidebar-overlay {
+        display: block;
+    }
+    
     #sidebar-overlay.visible {
         display: block;
+    }
+    
+    #sidebar-overlay:not(.visible) {
+        display: none;
     }
 }
 
