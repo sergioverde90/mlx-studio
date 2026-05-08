@@ -125,7 +125,7 @@ function renderMessages(messagesContainer, messages, onHighlight, onProcess, onC
     if (onCopy) {
         setupCopyButtonsOnCodeBlocks(messagesContainer, onCopy, onOpen);
     }
-    scrollToBottom();
+    scrollToBottom(true);
 }
 
 function appendMessage(container, role, content, animate = true) {
@@ -177,7 +177,7 @@ function appendMessage(container, role, content, animate = true) {
     }
 
     container.appendChild(messageEl);
-    scrollToBottom();
+    scrollToBottom(true);
     return messageEl;
 }
 
@@ -209,14 +209,33 @@ function highlightAllCode(messagesContainer) {
     }
 }
 
-function scrollToBottom() {
+let userScrolledUp = false;
+
+function scrollToBottom(force = false) {
     requestAnimationFrame(() => {
         const chatContainer = document.getElementById('chat-container');
         if (chatContainer) {
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if (force) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                userScrolledUp = false;
+            } else if (!userScrolledUp) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
         }
     });
 }
+
+document.addEventListener('scroll', function() {
+    const chatContainer = document.getElementById('chat-container');
+    if (chatContainer) {
+        const distanceFromBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+        if (distanceFromBottom > 30) {
+            userScrolledUp = true;
+        } else {
+            userScrolledUp = false;
+        }
+    }
+}, true);
 
 function parseThinkingAndContent(content) {
     const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/gi;
@@ -279,7 +298,7 @@ function showTypingIndicator(messagesContainer) {
         </div>
     `;
     messagesContainer.appendChild(messageEl);
-    scrollToBottom();
+    scrollToBottom(false);
 }
 
 function removeTypingIndicator() {
@@ -427,7 +446,7 @@ async function sendStreamingMessage(config, apiUrl, conversations, currentId, on
                         if (thinkingContentEl) {
                             thinkingContentEl.innerHTML = marked.parse(thinkingContent);
                         }
-                        scrollToBottom();
+                        scrollToBottom(false);
                     }
 
                     if (content) {
@@ -440,7 +459,7 @@ async function sendStreamingMessage(config, apiUrl, conversations, currentId, on
                             const textEl = assistantEl.querySelector('.message-text');
                             if (textEl) textEl.innerHTML = marked.parse(normalContent);
                         }
-                        scrollToBottom();
+                        scrollToBottom(false);
                         highlightAllCode(document.getElementById('messages'));
                     }
 
