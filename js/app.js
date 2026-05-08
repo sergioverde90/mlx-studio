@@ -981,7 +981,7 @@ function setupEventListeners() {
         const resendMsg = conv.messages[userIndex];
         if (!resendMsg) return;
 
-        conv.messages = conv.messages.slice(0, userIndex);
+        conv.messages = conv.messages.slice(0, userIndex + 1);
         saveConversations();
         removeTypingIndicator();
         els[DOM_IDS.messageInput].value = resendMsg.content;
