@@ -478,6 +478,61 @@ body::after {
     border: 1px solid var(--border-subtle);
     display: inline-block;
     max-width: calc(100% - 28px);
+    position: relative;
+}
+
+.message.user .message-text .user-message-content {
+    display: block;
+}
+
+.copy-msg-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(26, 26, 31, 0.85);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: rgba(212, 212, 216, 0.75);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    transform: scale(0.94);
+    z-index: 1;
+}
+
+.message.user:hover .copy-msg-btn {
+    opacity: 1;
+}
+
+.copy-msg-btn:hover {
+    background: rgba(42, 42, 46, 0.95);
+    color: rgba(212, 212, 216, 0.9);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.copy-msg-btn:active {
+    transform: scale(0.94);
+}
+
+.copy-msg-btn svg {
+    width: 11px;
+    height: 11px;
+}
+
+.copy-msg-btn.copied {
+    color: var(--accent);
+    border-color: rgba(184, 134, 11, 0.4);
+}
+
+.copy-msg-btn.copied svg {
+    animation: checkPop 0.25s ease;
 }
 
 .resend-btn {
@@ -510,6 +565,53 @@ body::after {
 
 .resend-btn svg {
     flex-shrink: 0;
+}
+
+/* Copy button for user messages */
+.copy-msg-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    transform: scale(0.94);
+    flex-shrink: 0;
+}
+
+.message.user:hover .copy-msg-btn {
+    opacity: 1;
+}
+
+.copy-msg-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    border-color: var(--border);
+}
+
+.copy-msg-btn:active {
+    transform: scale(0.94);
+}
+
+.copy-msg-btn svg {
+    width: 11px;
+    height: 11px;
+}
+
+.copy-msg-btn.copied {
+    color: var(--accent);
+    border-color: rgba(184, 134, 11, 0.4);
+}
+
+.copy-msg-btn.copied svg {
+    animation: checkPop 0.25s ease;
 }
 
 /* === Markdown Typography === */

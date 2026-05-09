@@ -144,12 +144,39 @@ function appendMessage(container, role, content, animate = true) {
     messageEl.innerHTML = `
         <div class="message-avatar">${avatarText}</div>
         <div class="message-content">
-            <div class="message-text"></div>
-            <button class="resend-btn" title="Resend"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Retry</button>
+            <div class="message-text">
+                <button class="copy-msg-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path>
+                </svg></button>
+            </div>
+            <div class="message-actions">
+                <button class="resend-btn" title="Resend"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Retry</button>
+            </div>
         </div>
     `;
 
     const textEl = messageEl.querySelector('.message-text');
+
+    if (role === 'user') {
+        const copyBtn = messageEl.querySelector('.copy-msg-btn');
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(content).then(() => {
+                copyBtn.classList.add('copied');
+                copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>`;
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    copyBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>`;
+                }, 2000);
+            });
+        });
+    }
 
     if (role === 'assistant') {
         const { thinkingHtml, contentHtml } = parseThinkingAndContent(content);
@@ -173,7 +200,13 @@ function appendMessage(container, role, content, animate = true) {
             textEl.innerHTML = escapeHtml(content);
         }
     } else {
-        textEl.innerHTML = escapeHtml(content);
+        const copyBtn = textEl.querySelector('.copy-msg-btn');
+        textEl.innerHTML = '';
+        textEl.appendChild(copyBtn);
+        const span = document.createElement('span');
+        span.className = 'user-message-content';
+        span.textContent = content;
+        textEl.appendChild(span);
     }
 
     container.appendChild(messageEl);
