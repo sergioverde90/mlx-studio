@@ -5,8 +5,8 @@ const CONVERSATIONS_KEY = 'tars_conversations';
 const DEFAULT_CONFIG = {
     apiUrl: 'http://localhost:8080/v1/chat/completions',
     systemPrompt: '',
-    model: 'unsloth/gemma-4-E4B-E4B-it-UD-MLX-4bit',
-    maxTokens: 8192,
+    model: 'mlx-community/gemma-4-26b-a4b-it-4bit',
+    maxTokens: 16384,
     temperature: 0.8,
     minP: 0.06,
     presencePenalty: 1.2,
