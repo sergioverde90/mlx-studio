@@ -151,6 +151,17 @@ body::after {
     cursor: pointer;
     transition: all var(--transition);
     width: 100%;
+    opacity: 1;
+}
+
+.new-chat-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.new-chat-btn:disabled:hover {
+    background: none;
+    border-color: transparent;
 }
 
 .new-chat-btn:hover {
@@ -196,6 +207,27 @@ body::after {
     line-height: 1.45;
     font-family: var(--font-mono);
     letter-spacing: 0.01em;
+}
+
+.conversation-item.empty {
+    background: var(--bg-thinking);
+    color: var(--text-secondary);
+}
+
+.conversation-item.empty:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.conversation-item.empty::before {
+    content: 'Empty';
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--accent-light);
+    border-radius: 3px;
+    margin-right: 8px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
 }
 
 .conversation-item:hover {
@@ -372,6 +404,13 @@ body::after {
     font-size: 15px;
     color: var(--text-muted);
     font-weight: 400;
+    font-style: italic;
+}
+
+.welcome-message {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-top: 8px;
     font-style: italic;
 }
 

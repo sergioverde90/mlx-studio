@@ -105,7 +105,8 @@ function renderConversations(conversations, currentId, onSelect, onDelete) {
 
     conversations.forEach(conv => {
         const item = document.createElement('div');
-        item.className = 'conversation-item' + (conv.id === currentId ? ' active' : '');
+        const isEmpty = conv.messages.length === 0;
+        item.className = 'conversation-item' + (conv.id === currentId ? ' active' : '') + (isEmpty ? ' empty' : '');
         item.innerHTML = `
             <span class="conversation-title">${escapeHtml(conv.title)}</span>
             <button class="conversation-delete" title="Delete">&times;</button>
@@ -854,6 +855,11 @@ function initDOM() {
 }
 
 function createNewConversation() {
+    const emptyConvCount = state.conversations.filter(c => c.messages.length === 0).length;
+    if (emptyConvCount >= 1) {
+        alert('Max 1 empty conversation allowed. Add a message to the existing empty conversation or delete it first.');
+        return;
+    }
     const conv = {
         id: generateId(),
         title: 'New Chat',
@@ -864,6 +870,7 @@ function createNewConversation() {
     saveConversations(state.conversations);
     selectConversation(conv.id);
     renderConversationsUI();
+    els[DOM_IDS.welcomeScreen].style.display = 'flex';
     els[DOM_IDS.messageInput].focus();
 }
 
@@ -888,6 +895,7 @@ function selectConversation(id) {
 
 function handleDeleteConversation(id) {
     const wasCurrent = state.currentConversationId === id;
+    const wasEmpty = state.conversations.find(c => c.id === id)?.messages.length === 0;
     state.conversations = state.conversations.filter(c => c.id !== id);
 
     saveConversations(state.conversations);
@@ -934,13 +942,19 @@ async function sendMessage() {
         createNewConversation();
     }
 
+    const conv = state.conversations.find(c => c.id === state.currentConversationId);
+    if (conv && conv.messages.length === 0) {
+        els[DOM_IDS.welcomeScreen].style.display = 'none';
+        conv.title = text.substring(0, UI.TITLE_MAX_LENGTH) + (text.length > UI.TITLE_MAX_LENGTH ? '...' : '');
+        saveConversations();
+    }
+
     els[DOM_IDS.messageInput].value = '';
     els[DOM_IDS.messageInput].style.height = 'auto';
     els[DOM_IDS.sendBtn].disabled = true;
     els[DOM_IDS.sendBtn].classList.add('hidden');
     els[DOM_IDS.stopBtn].classList.remove('hidden');
 
-    const conv = state.conversations.find(c => c.id === state.currentConversationId);
     if (!conv) return;
 
     conv.messages.push({ role: 'user', content: text });
@@ -995,6 +1009,12 @@ function stopGeneration() {
 }
 
 function renderConversationsUI() {
+    const emptyConvCount = state.conversations.filter(c => c.messages.length === 0).length;
+    const newChatBtn = els[DOM_IDS.newChatBtn];
+    if (newChatBtn) {
+        newChatBtn.disabled = emptyConvCount >= 1;
+        newChatBtn.title = emptyConvCount >= 1 ? 'Max 1 empty conversation allowed' : 'Start a new conversation';
+    }
     renderConversations(
         state.conversations,
         state.currentConversationId,
