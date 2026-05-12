@@ -4,6 +4,7 @@ const CONVERSATIONS_KEY = 'tars_conversations';
 
 const DEFAULT_CONFIG = {
     apiUrl: 'http://localhost:8080/v1/chat/completions',
+    useLocalStudioUrl: false,
     systemPrompt: '',
     model: 'mlx-community/gemma-4-26b-a4b-it-4bit',
     maxTokens: 16384,
@@ -42,6 +43,7 @@ const DOM_IDS = {
     messageInput: 'message-input',
     sendBtn: 'send-btn',
     stopBtn: 'stop-btn',
+    apiUrlToggleBtn: 'api-url-toggle-btn',
     thinkingToggleBtn: 'thinking-toggle-btn',
     chatContainer: 'chat-container',
     main: 'main',
@@ -54,7 +56,7 @@ const DOM_IDS = {
 };
 
 const SETTINGS_FIELDS = {
-    apiUrl: 'setting-api-url',
+    useLocalStudioUrl: 'setting-api-url-toggle',
     systemPrompt: 'setting-system-prompt',
     temperature: 'setting-temperature',
     minP: 'setting-min-p',
@@ -740,7 +742,10 @@ function setupSettings(config, onSave) {
     });
 
     saveBtn.addEventListener('click', () => {
-        config.apiUrl = document.getElementById(SETTINGS_FIELDS.apiUrl).value || config.apiUrl;
+        config.useLocalStudioUrl = document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl).checked || config.useLocalStudioUrl;
+        config.apiUrl = config.useLocalStudioUrl 
+            ? 'http://localhost:8081/v1/chat/completions'
+            : 'http://localhost:8080/v1/chat/completions';
         config.systemPrompt = document.getElementById(SETTINGS_FIELDS.systemPrompt).value;
         config.temperature = parseFloat(document.getElementById(SETTINGS_FIELDS.temperature).value) || config.temperature;
         config.minP = parseFloat(document.getElementById(SETTINGS_FIELDS.minP).value) || config.minP;
@@ -761,7 +766,7 @@ function setupSettings(config, onSave) {
 }
 
 function loadSettingsIntoUI(config) {
-    document.getElementById(SETTINGS_FIELDS.apiUrl).value = config.apiUrl || '';
+    document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl).checked = config.useLocalStudioUrl ?? false;
     document.getElementById(SETTINGS_FIELDS.systemPrompt).value = config.systemPrompt || '';
     document.getElementById(SETTINGS_FIELDS.temperature).value = config.temperature ?? '';
     document.getElementById(SETTINGS_FIELDS.minP).value = config.minP ?? '';
@@ -770,6 +775,10 @@ function loadSettingsIntoUI(config) {
     document.getElementById(SETTINGS_FIELDS.thinkingBudget).value = config.thinkingBudget ?? '';
     document.getElementById(SETTINGS_FIELDS.model).value = config.model || '';
     document.getElementById(SETTINGS_FIELDS.maxTokens).value = config.maxTokens ?? '';
+}
+
+function updateApiUrlToggleVisual(apiUrlToggleBtn, useLocalStudioUrl) {
+    apiUrlToggleBtn.classList.toggle('active', useLocalStudioUrl);
 }
 
 function updateThinkingToggleVisual(thinkingToggleBtn, enableThinking) {
@@ -796,6 +805,12 @@ let state = {
     isGenerating: false
 };
 
+function getApiUrl() {
+    return state.config.useLocalStudioUrl 
+        ? 'http://localhost:8081/v1/chat/completions'
+        : 'http://localhost:8080/v1/chat/completions';
+}
+
 const els = {};
 function cacheEl(id) {
     const el = document.getElementById(id);
@@ -812,12 +827,14 @@ function initDOM() {
     cacheEl(DOM_IDS.messageInput);
     cacheEl(DOM_IDS.sendBtn);
     cacheEl(DOM_IDS.stopBtn);
+    cacheEl(DOM_IDS.apiUrlToggleBtn);
     cacheEl(DOM_IDS.thinkingToggleBtn);
     cacheEl(DOM_IDS.chatContainer);
     cacheEl(DOM_IDS.main);
     cacheEl(DOM_IDS.sidebarToggle);
     cacheEl(DOM_IDS.settingsBtn);
     cacheEl(DOM_IDS.settingsOverlay);
+    cacheEl(DOM_IDS.apiUrlToggleBtn);
     cacheEl(DOM_IDS.closeSettings);
     cacheEl(DOM_IDS.saveSettings);
     cacheEl(DOM_IDS.sidebarOverlay);
@@ -935,7 +952,7 @@ async function sendMessage() {
 
     sendStreamingMessage(
         state.config,
-        state.config.apiUrl,
+        getApiUrl(),
         state.conversations,
         state.currentConversationId,
         (fullContent) => {
@@ -982,6 +999,12 @@ function renderConversationsUI() {
 function setupEventListeners() {
     els[DOM_IDS.newChatBtn].addEventListener('click', createNewConversation);
 
+    els[DOM_IDS.apiUrlToggleBtn].addEventListener('click', () => {
+        state.config.useLocalStudioUrl = !state.config.useLocalStudioUrl;
+        saveConfig(state.config);
+        updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
+    });
+
     els[DOM_IDS.thinkingToggleBtn].addEventListener('click', () => {
         state.config.enableThinking = !state.config.enableThinking;
         saveConfig(state.config);
@@ -1027,6 +1050,7 @@ function setupEventListeners() {
         state.config = savedConfig;
         saveConfig(state.config);
         updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
+        updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
     });
 
     document.addEventListener('keydown', (e) => {
@@ -1043,6 +1067,7 @@ function init() {
     setupSidebar();
     setupEventListeners();
     loadSettingsIntoUI(state.config);
+    updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
     updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
     els[DOM_IDS.messageInput].focus();
 }

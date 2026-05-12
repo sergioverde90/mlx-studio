@@ -998,6 +998,32 @@ body::after {
     border-radius: 2px;
 }
 
+.api-url-toggle-btn {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition);
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.api-url-toggle-btn:hover {
+    border-color: var(--text-muted);
+    color: var(--text-secondary);
+}
+
+.api-url-toggle-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
 .thinking-toggle-btn {
     width: 30px;
     height: 30px;
