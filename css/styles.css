@@ -46,6 +46,13 @@
 
     --transition: 0.15s ease;
     --transition-slow: 0.25s ease;
+    --code-block-height: 70vh;
+}
+
+@media (max-width: 768px) {
+    :root {
+        --code-block-height: 55vh;
+    }
 }
 
 /* === Reset & Base === */
@@ -730,12 +737,16 @@ body::after {
     border: 1px solid var(--border);
     background: var(--bg-code);
     position: relative;
+    width: 100%;
+    height: var(--code-block-height);
 }
 
 .message.text-only pre code {
     display: block;
     padding: 14px 18px;
     overflow-x: auto;
+    overflow-y: auto;
+    height: calc(var(--code-block-height) - 34px);
     font-size: 13px;
     line-height: 1.62;
     font-family: var(--font-mono);
@@ -818,10 +829,28 @@ body::after {
     animation: checkPop 0.25s ease;
 }
 
-@keyframes checkPop {
-    0% { transform: scale(0.7); }
-    50% { transform: scale(1.15); }
-    100% { transform: scale(1); }
+/* Scrollbar styling for code blocks */
+.message.text-only pre::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+}
+
+.message.text-only pre::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+}
+
+.message.text-only pre::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 5px;
+}
+
+.message.text-only pre::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.message.text-only pre::-webkit-scrollbar-corner {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* === Thinking Block === */

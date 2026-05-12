@@ -56,7 +56,6 @@ const DOM_IDS = {
 };
 
 const SETTINGS_FIELDS = {
-    useLocalStudioUrl: 'setting-api-url-toggle',
     systemPrompt: 'setting-system-prompt',
     temperature: 'setting-temperature',
     minP: 'setting-min-p',
@@ -128,6 +127,7 @@ function renderMessages(messagesContainer, messages, onHighlight, onProcess, onC
         setupCopyButtonsOnCodeBlocks(messagesContainer, onCopy, onOpen);
     }
     scrollToBottom(true);
+    highlightAllCode(messagesContainer);
 }
 
 function appendMessage(container, role, content, animate = true) {
@@ -742,10 +742,13 @@ function setupSettings(config, onSave) {
     });
 
     saveBtn.addEventListener('click', () => {
-        config.useLocalStudioUrl = document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl).checked || config.useLocalStudioUrl;
+        const apiUrlElement = document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl);
+        if (apiUrlElement) {
+            config.useLocalStudioUrl = apiUrlElement.checked || config.useLocalStudioUrl;
+        }
         config.apiUrl = config.useLocalStudioUrl 
-            ? 'http://localhost:8081/v1/chat/completions'
-            : 'http://localhost:8080/v1/chat/completions';
+            ? 'http://localhost:8080/v1/chat/completions'
+            : 'http://localhost:8081/v1/chat/completions';
         config.systemPrompt = document.getElementById(SETTINGS_FIELDS.systemPrompt).value;
         config.temperature = parseFloat(document.getElementById(SETTINGS_FIELDS.temperature).value) || config.temperature;
         config.minP = parseFloat(document.getElementById(SETTINGS_FIELDS.minP).value) || config.minP;
@@ -766,7 +769,10 @@ function setupSettings(config, onSave) {
 }
 
 function loadSettingsIntoUI(config) {
-    document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl).checked = config.useLocalStudioUrl ?? false;
+    const apiUrlElement = document.getElementById(SETTINGS_FIELDS.useLocalStudioUrl);
+    if (apiUrlElement) {
+        apiUrlElement.checked = config.useLocalStudioUrl ?? false;
+    }
     document.getElementById(SETTINGS_FIELDS.systemPrompt).value = config.systemPrompt || '';
     document.getElementById(SETTINGS_FIELDS.temperature).value = config.temperature ?? '';
     document.getElementById(SETTINGS_FIELDS.minP).value = config.minP ?? '';
@@ -906,6 +912,7 @@ function handleDeleteConversation(id) {
                 copyCodeToClipboard,
                 null
             );
+            highlightAllCode(els[DOM_IDS.messages]);
         }
     }
 }
