@@ -733,20 +733,18 @@ body::after {
 .message.text-only pre {
     margin: 1.1em 0;
     border-radius: var(--radius-sm);
-    overflow: hidden;
     border: 1px solid var(--border);
     background: var(--bg-code);
     position: relative;
     width: 100%;
     height: var(--code-block-height);
+    overflow: auto;
+    scrollbar-gutter: stable both-axes;
 }
 
 .message.text-only pre code {
     display: block;
     padding: 14px 18px;
-    overflow-x: auto;
-    overflow-y: auto;
-    height: calc(var(--code-block-height) - 34px);
     font-size: 13px;
     line-height: 1.62;
     font-family: var(--font-mono);
@@ -754,6 +752,11 @@ body::after {
     tab-size: 4;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    white-space: pre;
+    overflow-wrap: normal;
+    word-break: normal;
+    min-width: 100%;
+    max-width: 100%;
 }
 
 .message.text-only code:not(pre code) {
@@ -850,6 +853,57 @@ body::after {
 }
 
 .message.text-only pre::-webkit-scrollbar-corner {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Always show scrollbars */
+.message.text-only pre {
+    scrollbar-color: rgba(255, 255, 255, 0.6) rgba(255, 255, 255, 0.15);
+    scrollbar-width: thin;
+}
+
+/* Force horizontal scrollbar to always be visible */
+.message.text-only pre::-webkit-scrollbar-x {
+    display: block;
+}
+
+.message.text-only pre::-webkit-scrollbar-y {
+    display: block;
+}
+
+.message.text-only pre::-webkit-scrollbar-x-thumb {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 5px;
+}
+
+.message.text-only pre::-webkit-scrollbar-y-thumb {
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 5px;
+}
+
+.message.text-only pre::-webkit-scrollbar-x-track {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.message.text-only pre::-webkit-scrollbar-y-track {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Ensure horizontal overflow is possible */
+.message.text-only pre {
+    min-width: 100%;
+}
+
+.message.text-only pre code {
+    min-width: 100%;
+}
+
+/* Force horizontal scrollbar visibility */
+.message.text-only pre::-webkit-scrollbar-x {
+    -webkit-appearance: none;
+}
+
+.message.text-only pre::-webkit-scrollbar-x {
     background: rgba(255, 255, 255, 0.15);
 }
 
