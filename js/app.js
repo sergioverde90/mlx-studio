@@ -49,6 +49,8 @@ const DOM_IDS = {
     main: 'main',
     sidebarToggle: 'sidebar-toggle',
     settingsBtn: 'settings-btn',
+    exportBtn: 'export-btn',
+    exportSelect: 'export-conv-select',
     settingsOverlay: 'settings-overlay',
     closeSettings: 'close-settings',
     saveSettings: 'save-settings',
@@ -109,9 +111,11 @@ function renderConversations(conversations, currentId, onSelect, onDelete) {
         item.className = 'conversation-item' + (conv.id === currentId ? ' active' : '') + (isEmpty ? ' empty' : '');
         item.innerHTML = `
             <span class="conversation-title">${escapeHtml(conv.title)}</span>
+            <button class="conversation-export" title="Export to Markdown" aria-label="Export conversation">${conv.messages.length > 0 ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>' : '⚠️'}</button>
             <button class="conversation-delete" title="Delete">&times;</button>
         `;
         item.addEventListener('click', () => onSelect(conv.id));
+        item.querySelector('.conversation-export').addEventListener('click', (e) => onExport(conv.id, e));
         item.querySelector('.conversation-delete').addEventListener('click', (e) => onDelete(conv.id, e));
         list.appendChild(item);
     });
@@ -840,6 +844,8 @@ function initDOM() {
     cacheEl(DOM_IDS.main);
     cacheEl(DOM_IDS.sidebarToggle);
     cacheEl(DOM_IDS.settingsBtn);
+    cacheEl(DOM_IDS.exportBtn);
+    cacheEl(DOM_IDS.exportSelect);
     cacheEl(DOM_IDS.settingsOverlay);
     cacheEl(DOM_IDS.apiUrlToggleBtn);
     cacheEl(DOM_IDS.closeSettings);
@@ -1019,12 +1025,87 @@ function renderConversationsUI() {
         state.conversations,
         state.currentConversationId,
         (id) => selectConversation(id),
-        (id, e) => { e.stopPropagation(); handleDeleteConversation(id); }
+        (id, e) => { e.stopPropagation(); handleDeleteConversation(id); },
+        (id, e) => { e.stopPropagation(); exportConversation(id); }
     );
+    updateExportSelect();
+}
+
+function exportConversation(id) {
+    const conv = state.conversations.find(c => c.id === id);
+    if (!conv) return;
+    
+    const exportSelect = els[DOM_IDS.exportSelect];
+    exportSelect.value = id;
+    exportConversationToMarkdown();
+}
+
+function exportConversationToMarkdown() {
+    const exportSelect = els[DOM_IDS.exportSelect];
+    const conv = state.conversations.find(c => c.id === exportSelect.value);
+    if (!conv || conv.messages.length === 0) {
+        alert('No messages in this conversation');
+        return;
+    }
+
+    const timestamp = new Date();
+    const dateStr = timestamp.toISOString().slice(0, 10).replace(/-/g, '');
+    const timeStr = timestamp.toTimeString().slice(0, 5).replace(/:/g, '');
+    const filename = `conversation-${dateStr}-${timeStr}.md`;
+
+    let markdown = `# ${conv.title || 'New Chat'}\n\n`;
+    markdown += `Generated: ${timestamp.toLocaleString()}\n\n---\n\n`;
+
+    for (let i = 0; i < conv.messages.length; i++) {
+        const msg = conv.messages[i];
+        const roleLabel = msg.role === 'user' ? '**User**' : '**Assistant**';
+        markdown += `> ${roleLabel}:\n\n`;
+        markdown += msg.content;
+
+        if (i < conv.messages.length - 1) {
+            markdown += '\n\n';
+        }
+    }
+
+    markdown += '\n---\n\n*End of conversation*';
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function updateExportSelect() {
+    const exportSelect = els[DOM_IDS.exportSelect];
+    if (!exportSelect) return;
+
+    exportSelect.innerHTML = '<option value="">Select conversation...</option>';
+
+    state.conversations.forEach(conv => {
+        const option = document.createElement('option');
+        option.value = conv.id;
+        option.textContent = conv.title || 'Untitled';
+        if (conv.id === state.currentConversationId) {
+            option.selected = true;
+        }
+        exportSelect.appendChild(option);
+    });
 }
 
 function setupEventListeners() {
     els[DOM_IDS.newChatBtn].addEventListener('click', createNewConversation);
+    els[DOM_IDS.exportBtn].addEventListener('click', exportConversationToMarkdown);
+    els[DOM_IDS.exportSelect].addEventListener('change', (e) => {
+        const conv = state.conversations.find(c => c.id === e.target.value);
+        if (conv) {
+            selectConversation(conv.id);
+        }
+    });
 
     els[DOM_IDS.apiUrlToggleBtn].addEventListener('click', () => {
         state.config.useLocalStudioUrl = !state.config.useLocalStudioUrl;
@@ -1097,6 +1178,7 @@ function init() {
     updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
     updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
     els[DOM_IDS.messageInput].focus();
+    updateExportSelect();
 }
 
 function loadLastConversation() {

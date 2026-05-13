@@ -272,31 +272,33 @@ body::after {
     background: rgba(192, 57, 43, 0.06);
 }
 
+.conversation-export {
+    opacity: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: all var(--transition);
+    font-size: 16px;
+    line-height: 1;
+    flex-shrink: 0;
+    font-family: var(--font-serif);
+}
+
+.conversation-item:hover .conversation-export {
+    opacity: 1;
+}
+
+.conversation-export:hover {
+    color: var(--accent);
+    background: var(--accent-light);
+}
+
 #sidebar-footer {
     padding: 8px;
     border-top: 1px solid var(--border);
-}
-
-.sidebar-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 13px;
-    font-family: var(--font-mono);
-    letter-spacing: 0.01em;
-    cursor: pointer;
-    transition: all var(--transition);
-}
-
-.sidebar-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
 }
 
 /* === Main Content === */
