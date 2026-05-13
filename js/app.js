@@ -157,9 +157,7 @@ function appendMessage(container, role, content, animate = true) {
                     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2-2v1"></path>
                 </svg></button>
             </div>
-            <div class="message-actions">
-                <button class="resend-btn" title="Resend"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg> Retry</button>
-            </div>
+            <div class="message-actions"></div>
         </div>
     `;
 
@@ -214,6 +212,28 @@ function appendMessage(container, role, content, animate = true) {
         span.className = 'user-message-content';
         span.textContent = content;
         textEl.appendChild(span);
+        const retryBtn = document.createElement('button');
+        retryBtn.className = 'resend-btn';
+        retryBtn.title = 'Resend';
+        retryBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`;
+        retryBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const messageEl = messageEl;
+            const conv = state.conversations.find(c => c.id === state.currentConversationId);
+            if (!conv) return;
+            let userIndex = parseInt(messageEl.dataset.index, 10);
+            if (isNaN(userIndex)) return;
+            const resendMsg = conv.messages[userIndex];
+            if (!resendMsg) return;
+            conv.messages = conv.messages.slice(0, userIndex + 1);
+            saveConversations();
+            removeTypingIndicator();
+            els[DOM_IDS.messageInput].value = resendMsg.content;
+            els[DOM_IDS.messageInput].dispatchEvent(new Event('input'));
+            els[DOM_IDS.messageInput].focus();
+            requestAnimationFrame(() => sendMessage());
+        });
+        textEl.appendChild(retryBtn);
     }
 
     container.appendChild(messageEl);

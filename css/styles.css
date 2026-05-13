@@ -584,9 +584,13 @@ body::after {
 }
 
 .resend-btn {
-    display: block;
+    position: absolute;
+    top: 6px;
+    right: 25px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     padding: 2px 8px;
-    margin-top: 8px;
     background: none;
     border: 1px solid transparent;
     color: var(--text-muted);
@@ -596,7 +600,7 @@ body::after {
     transition: all var(--transition);
     border-radius: 4px;
     opacity: 0;
-    margin-left: auto;
+    white-space: nowrap;
 }
 
 .message.user:hover .resend-btn {
