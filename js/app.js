@@ -1012,6 +1012,117 @@ async function sendMessage() {
     );
 }
 
+async function handleCompactCommand() {
+    const conv = state.conversations.find(c => c.id === state.currentConversationId);
+    if (!conv || conv.messages.length === 0) {
+        alert('No conversation history to compact');
+        return;
+    }
+
+    const conversationHistory = conv.messages.map(m => `${m.role}: ${m.content}`).join('\n\n');
+    const compactPrompt = `Summarize the entire conversation below in markdown format. Be concise but preserve important information. Return ONLY the markdown content, no explanations or additional text.
+
+Conversation history:
+${conversationHistory}`;
+
+    els[DOM_IDS.messageInput].value = 'Compacting conversation...';
+    els[DOM_IDS.messageInput].disabled = true;
+    els[DOM_IDS.sendBtn].disabled = true;
+    els[DOM_IDS.stopBtn].classList.remove('hidden');
+    els[DOM_IDS.stopBtn].textContent = 'Stop Compacting';
+    document.getElementById('loading-overlay').classList.remove('hidden');
+
+    const abortController = new AbortController();
+
+    const messages = buildRequestMessages(state.conversations, state.currentConversationId, state.config);
+    messages.push({ role: 'user', content: compactPrompt });
+    const payload = buildRequestPayload(state.config, messages);
+
+    try {
+        const response = await fetch(getApiUrl(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: abortController.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const reader = response.body.getReader();
+        let buffer = '';
+        let markdownContent = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += new TextDecoder().decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed === 'data: [DONE]') continue;
+
+                let jsonStr = trimmed;
+                if (trimmed.startsWith('data: ')) {
+                    jsonStr = trimmed.slice(6);
+                } else if (trimmed.startsWith('data:')) {
+                    jsonStr = trimmed.slice(5);
+                } else {
+                    continue;
+                }
+
+                try {
+                    const data = JSON.parse(jsonStr.trim());
+                    const choice = data.choices?.[0];
+                    if (!choice) continue;
+
+                    const content = choice.delta?.content;
+                    if (content) {
+                        markdownContent += content;
+                    }
+                } catch (e) {
+                    // Skip malformed JSON
+                }
+            }
+        }
+
+        // Replace all messages with the markdown summary as the first assistant message
+        conv.messages = [{ role: 'assistant', content: markdownContent }];
+        conv.title = 'Compact Summary';
+        saveConversations();
+
+        // Clear the chat display and re-render
+        els[DOM_IDS.messages].innerHTML = '';
+        appendMessage(els[DOM_IDS.messages], 'assistant', markdownContent);
+        highlightAllCode(els[DOM_IDS.messages]);
+
+        // Hide loading overlay and reset UI
+        document.getElementById('loading-overlay').classList.add('hidden');
+        els[DOM_IDS.messageInput].value = '';
+        els[DOM_IDS.sendBtn].disabled = false;
+        els[DOM_IDS.sendBtn].classList.remove('hidden');
+        els[DOM_IDS.stopBtn].classList.add('hidden');
+        els[DOM_IDS.messageInput].focus();
+
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            els[DOM_IDS.messageInput].value = '';
+            els[DOM_IDS.sendBtn].disabled = false;
+            els[DOM_IDS.sendBtn].classList.remove('hidden');
+            els[DOM_IDS.stopBtn].classList.add('hidden');
+        } else {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            appendMessage(els[DOM_IDS.messages], 'assistant', `**Error:** Failed to compact conversation: ${err.message}`);
+        }
+        finishGeneration();
+    }
+}
+
 function finishGeneration() {
     state.isGenerating = false;
     els[DOM_IDS.sendBtn].disabled = false;
@@ -1123,7 +1234,12 @@ function setupEventListeners() {
     els[DOM_IDS.messageInput].addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (!els[DOM_IDS.sendBtn].disabled) sendMessage();
+            const text = els[DOM_IDS.messageInput].value.trim();
+            if (text.startsWith('/compact')) {
+                handleCompactCommand();
+            } else if (!els[DOM_IDS.sendBtn].disabled) {
+                sendMessage();
+            }
         }
     });
 

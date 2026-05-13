@@ -181,7 +181,6 @@
                     <div class="welcome-content">
                         <h1>T<label style="color: #b8860b;">.</label>A<label style="color:#b8860b;">.</label>R<label style="color: #b8860b;">.</label>S</h1>
                         <p class="welcome-subtitle">A local AI assistant</p>
-                        <p class="welcome-message">I'm here to help you with anything you need. What would you like to work on today?</p>
                     </div>
                 </div>
                 <div id="messages"></div>
@@ -268,6 +267,14 @@
             <div class="settings-footer">
                 <button id="save-settings" class="save-btn">Save</button>
             </div>
+        </div>
+    </div>
+
+    <div id="loading-overlay" class="overlay hidden">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <h3>Compacting conversation...</h3>
+            <p>Analyzing and summarizing your chat history</p>
         </div>
     </div>
 
