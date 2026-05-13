@@ -296,9 +296,36 @@ body::after {
     background: var(--accent-light);
 }
 
+.sidebar-select:hover {
+    border-color: var(--text-muted);
+}
+
 #sidebar-footer {
     padding: 8px;
     border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sidebar-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-serif);
+    font-size: 13px;
+    transition: all var(--transition);
+}
+
+.sidebar-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
 }
 
 /* === Main Content === */
