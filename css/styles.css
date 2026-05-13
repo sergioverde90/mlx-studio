@@ -782,9 +782,9 @@ body::after {
     background: var(--bg-code);
     position: relative;
     width: 100%;
-    height: var(--code-block-height);
     overflow: auto;
     scrollbar-gutter: stable both-axes;
+    padding: 0;
 }
 
 .message.text-only pre code {
