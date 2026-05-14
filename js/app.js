@@ -125,13 +125,13 @@ function renderMessages(messagesContainer, messages, onHighlight, onProcess, onC
     messages.forEach(msg => {
         appendMessage(messagesContainer, msg.role, msg.content, false);
     });
-    onHighlight();
-    onProcess();
+    if (onHighlight) onHighlight();
+    if (onProcess) onProcess();
     if (onCopy) {
         setupCopyButtonsOnCodeBlocks(messagesContainer, onCopy, onOpen);
     }
     scrollToBottom(true);
-    highlightAllCode(messagesContainer);
+    if (onHighlight) highlightAllCode(messagesContainer);
 }
 
 function appendMessage(container, role, content, animate = true) {
@@ -217,15 +217,21 @@ function appendMessage(container, role, content, animate = true) {
         retryBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`;
         retryBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const messageEl = messageEl;
             const conv = state.conversations.find(c => c.id === state.currentConversationId);
             if (!conv) return;
             let userIndex = parseInt(messageEl.dataset.index, 10);
             if (isNaN(userIndex)) return;
             const resendMsg = conv.messages[userIndex];
             if (!resendMsg) return;
-            conv.messages = conv.messages.slice(0, userIndex + 1);
+            // Remove all messages after the retry point (assistant responses and future user messages)
+            // Don't include the retry user message yet - sendMessage() will add it
+            conv.messages = conv.messages.slice(0, userIndex);
             saveConversations();
+            // Clear the conversation view to reflect the truncated history
+            const container = els[DOM_IDS.messages];
+            container.innerHTML = '';
+            // Re-render only messages up to the retry point
+            renderMessages(container, conv.messages, () => highlightAllCode(container), () => {}, () => {});
             removeTypingIndicator();
             els[DOM_IDS.messageInput].value = resendMsg.content;
             els[DOM_IDS.messageInput].dispatchEvent(new Event('input'));
