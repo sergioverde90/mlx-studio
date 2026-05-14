@@ -31,7 +31,8 @@ const STREAM_DONE_TOKEN = 'data: [DONE]';
 const UI = {
     MAX_INPUT_HEIGHT: 200,
     TITLE_MAX_LENGTH: 40,
-    MOBILE_BREAKPOINT: 768
+    MOBILE_BREAKPOINT: 768,
+    MAX_FILE_SIZE: 50 * 1024 * 1024 // 50MB
 };
 
 const DOM_IDS = {
@@ -45,6 +46,9 @@ const DOM_IDS = {
     stopBtn: 'stop-btn',
     apiUrlToggleBtn: 'api-url-toggle-btn',
     thinkingToggleBtn: 'thinking-toggle-btn',
+    pdfUploadBtn: 'pdf-upload-btn',
+    pdfFileInput: 'pdf-file-input',
+    fileInfo: 'file-info',
     chatContainer: 'chat-container',
     main: 'main',
     sidebarToggle: 'sidebar-toggle',
@@ -338,6 +342,90 @@ function toggleThinking(btn) {
     const content = btn.nextElementSibling;
     content.classList.toggle('open');
 }
+
+// === PDF Upload Functions ===
+
+let currentPdfFile = null;
+
+function setupPdfUpload() {
+    const pdfUploadBtn = document.getElementById(DOM_IDS.pdfUploadBtn);
+    const pdfFileInput = document.getElementById(DOM_IDS.pdfFileInput);
+    const fileInfo = document.getElementById(DOM_IDS.fileInfo);
+
+    pdfUploadBtn.addEventListener('click', () => {
+        pdfFileInput.click();
+    });
+
+    pdfFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handlePdfFile(file, pdfUploadBtn, fileInfo);
+        }
+    });
+}
+
+function handlePdfFile(file, pdfUploadBtn, fileInfo) {
+    // Validate file type
+    if (!file.type === 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Please select a PDF file');
+        return;
+    }
+
+    // Validate file size
+    if (file.size > UI.MAX_FILE_SIZE) {
+        alert(`File size exceeds ${UI.MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+        return;
+    }
+
+    // Clear previous file
+    if (currentPdfFile) {
+        currentPdfFile = null;
+        pdfUploadBtn.classList.remove('active');
+        fileInfo.classList.add('hidden');
+        document.getElementById(DOM_IDS.pdfFileInput).value = '';
+    }
+
+    // Read file as Base64
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const base64Content = e.target.result;
+        currentPdfFile = {
+            file: file,
+            base64: base64Content,
+            name: file.name,
+            size: file.size
+        };
+
+        // Update UI
+        pdfUploadBtn.classList.add('active');
+        fileInfo.classList.remove('hidden');
+        fileInfo.innerHTML = `
+            <span>📄 ${escapeHtml(file.name)}</span>
+            <span class="file-size">${formatFileSize(file.size)}</span>
+            <button class="remove-file-btn" title="Remove file">&times;</button>
+        `;
+
+        // Add remove button handler
+        fileInfo.querySelector('.remove-file-btn').addEventListener('click', () => {
+            currentPdfFile = null;
+            pdfUploadBtn.classList.remove('active');
+            fileInfo.classList.add('hidden');
+            document.getElementById(DOM_IDS.pdfFileInput).value = '';
+        });
+    };
+    reader.onerror = () => {
+        alert('Error reading file');
+    };
+    reader.readAsDataURL(file);
+}
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+
+// === End PDF Upload Functions ===
 
 if (typeof window !== 'undefined') {
     window.toggleThinking = toggleThinking;
@@ -866,6 +954,9 @@ function initDOM() {
     cacheEl(DOM_IDS.settingsOverlay);
     cacheEl(DOM_IDS.apiUrlToggleBtn);
     cacheEl(DOM_IDS.thinkingToggleBtn);
+    cacheEl(DOM_IDS.pdfUploadBtn);
+    cacheEl(DOM_IDS.pdfFileInput);
+    cacheEl(DOM_IDS.fileInfo);
     cacheEl(DOM_IDS.closeSettings);
     cacheEl(DOM_IDS.saveSettings);
     cacheEl(DOM_IDS.sidebarOverlay);
@@ -960,7 +1051,7 @@ function handleTitleUpdate(convId, content) {
 
 async function sendMessage() {
     const text = els[DOM_IDS.messageInput].value.trim();
-    if (!text || state.isGenerating) return;
+    if (!text && !currentPdfFile) return;
 
     if (!state.currentConversationId) {
         createNewConversation();
@@ -973,6 +1064,12 @@ async function sendMessage() {
         saveConversations();
     }
 
+    // Build message content with PDF if attached
+    let messageContent = text;
+    if (currentPdfFile) {
+        messageContent = `[PDF: ${currentPdfFile.name}] ${messageContent}`;
+    }
+
     els[DOM_IDS.messageInput].value = '';
     els[DOM_IDS.messageInput].style.height = 'auto';
     els[DOM_IDS.sendBtn].disabled = true;
@@ -981,12 +1078,12 @@ async function sendMessage() {
 
     if (!conv) return;
 
-    conv.messages.push({ role: 'user', content: text });
+    conv.messages.push({ role: 'user', content: messageContent });
     if (conv.messages.length === 1) {
-        handleTitleUpdate(state.currentConversationId, text);
+        handleTitleUpdate(state.currentConversationId, messageContent);
     }
     saveConversations();
-    appendMessage(els[DOM_IDS.messages], 'user', text);
+    appendMessage(els[DOM_IDS.messages], 'user', messageContent);
 
     showTypingIndicator(els[DOM_IDS.messages]);
 
@@ -1234,6 +1331,17 @@ function setupEventListeners() {
         updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
     });
 
+    els[DOM_IDS.pdfUploadBtn].addEventListener('click', () => {
+        els[DOM_IDS.pdfFileInput].click();
+    });
+
+    els[DOM_IDS.pdfFileInput].addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            handlePdfFile(file, els[DOM_IDS.pdfUploadBtn], els[DOM_IDS.fileInfo]);
+        }
+    });
+
     els[DOM_IDS.sendBtn].addEventListener('click', sendMessage);
     els[DOM_IDS.stopBtn].addEventListener('click', stopGeneration);
 
@@ -1291,7 +1399,6 @@ function setupEventListeners() {
 function init() {
     initDOM();
     renderConversationsUI();
-    loadLastConversation();
     setupSidebar();
     setupEventListeners();
     loadSettingsIntoUI(state.config);
@@ -1300,10 +1407,4 @@ function init() {
     els[DOM_IDS.messageInput].focus();
 }
 
-function loadLastConversation() {
-    if (state.conversations.length > 0) {
-        selectConversation(state.conversations[state.conversations.length - 1].id);
-    }
-}
-
-init();
+document.addEventListener('DOMContentLoaded', init);
