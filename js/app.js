@@ -35,6 +35,228 @@ const UI = {
     MAX_FILE_SIZE: 50 * 1024 * 1024 // 50MB
 };
 
+// === Slash Command System ===
+
+const SLASH_COMMANDS = [
+    {
+        name: 'compact',
+        description: 'Summarize and compress conversation history',
+        icon: '⬡',
+        handler: handleCompactCommand
+    }
+];
+
+class SlashCommandManager {
+    constructor(inputElement, commands) {
+        this.input = inputElement;
+        this.commands = commands;
+        this.dropdown = null;
+        this.activeIndex = -1;
+        this.isOpen = false;
+        this.input.addEventListener('input', () => this.handleInput());
+        this.input.addEventListener('keydown', (e) => this.handleKeydown(e));
+        document.addEventListener('click', (e) => this.handleOutsideClick(e));
+    }
+
+    handleInput() {
+        const value = this.input.value;
+        const cursorPos = this.input.selectionStart;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const slashIndex = textBeforeCursor.lastIndexOf('/');
+
+        if (slashIndex === -1) {
+            this.close();
+            return;
+        }
+
+        const afterSlash = value.slice(slashIndex + 1, cursorPos);
+        if (afterSlash.includes(' ')) {
+            this.close();
+            return;
+        }
+
+        const filtered = this.commands.filter(cmd =>
+            cmd.name.toLowerCase().includes(afterSlash.toLowerCase())
+        );
+
+        if (filtered.length === 0) {
+            this.close();
+            return;
+        }
+
+        this.activeIndex = 0;
+        this.render(filtered, afterSlash);
+    }
+
+    handleKeydown(e) {
+        if (!this.isOpen) {
+            if (e.key === '/' && e.ctrlKey === false && e.metaKey === false) {
+                // Let the input handle the "/" character, then handleInput will open the dropdown
+                return;
+            }
+            return;
+        }
+
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            this.navigate(e.key === 'ArrowDown' ? 1 : -1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (this.activeIndex >= 0) {
+                this.select(this.activeIndex);
+            } else {
+                this.select(0);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            this.close();
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (this.activeIndex >= 0) {
+                this.select(this.activeIndex);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            this.close();
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            if (this.activeIndex >= 0) {
+                this.select(this.activeIndex);
+            }
+        }
+    }
+
+    navigate(direction) {
+        const visible = this.getCurrentFilteredCommands();
+        this.activeIndex = Math.max(0, Math.min(visible.length - 1, this.activeIndex + direction));
+        this.render(visible, this.getCurrentPrefix());
+    }
+
+    select(index) {
+        const visible = this.getCurrentFilteredCommands();
+        const command = visible[index];
+        if (!command) return;
+
+        const value = this.input.value;
+        const cursorPos = this.input.selectionStart;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const slashIndex = textBeforeCursor.lastIndexOf('/');
+
+        const newValue = value.slice(0, slashIndex) + '/' + command.name + value.slice(cursorPos);
+        this.input.value = newValue;
+
+        const newCursorPos = slashIndex + 1 + command.name.length;
+        this.input.setSelectionRange(newCursorPos, newCursorPos);
+        this.input.dispatchEvent(new Event('input'));
+        this.input.focus();
+
+        this.close();
+    }
+
+    render(items, prefix) {
+        if (!this.dropdown) {
+            this.dropdown = document.createElement('div');
+            this.dropdown.id = DOM_IDS.slashDropdown;
+            this.dropdown.innerHTML = `
+                <div class="slash-command-header">Commands</div>
+                <div class="slash-command-list"></div>
+            `;
+            document.body.appendChild(this.dropdown);
+        }
+
+        const listEl = this.dropdown.querySelector('.slash-command-list');
+        if (items.length === 0) {
+            listEl.innerHTML = '<div class="slash-command-no-results">No matching commands</div>';
+        } else {
+            listEl.innerHTML = items.map((cmd, i) => {
+                const highlighted = this.highlightMatch(cmd.name, prefix);
+                return `
+                    <div class="slash-command-item ${i === this.activeIndex ? 'active' : ''}" data-index="${i}">
+                        <div class="slash-command-icon">${cmd.icon}</div>
+                        <div class="slash-command-info">
+                            <div class="slash-command-name">${highlighted}</div>
+                            <div class="slash-command-desc">${cmd.description}</div>
+                        </div>
+                        <div class="slash-command-hint">↵</div>
+                    </div>
+                `;
+            }).join('');
+
+            listEl.querySelectorAll('.slash-command-item').forEach((el, i) => {
+                el.addEventListener('click', () => {
+                    this.select(i);
+                });
+            });
+        }
+
+        this.dropdown.classList.add('visible');
+        this.isOpen = true;
+        this.positionDropdown();
+    }
+
+    highlightMatch(name, prefix) {
+        if (!prefix) return `<span class="slash-prefix">/</span>${name}`;
+        const idx = name.toLowerCase().indexOf(prefix.toLowerCase());
+        if (idx === -1) return `<span class="slash-prefix">/</span>${name}`;
+        const before = name.slice(0, idx);
+        const match = name.slice(idx, idx + prefix.length);
+        const after = name.slice(idx + prefix.length);
+        return `<span class="slash-prefix">/</span>${before}<strong style="color:var(--accent)">${match}</strong>${after}`;
+    }
+
+    getCurrentPrefix() {
+        const value = this.input.value;
+        const cursorPos = this.input.selectionStart;
+        const textBeforeCursor = value.slice(0, cursorPos);
+        const slashIndex = textBeforeCursor.lastIndexOf('/');
+        if (slashIndex === -1 || slashIndex !== cursorPos - 1) return '';
+        return value.slice(slashIndex + 1, cursorPos);
+    }
+
+    getCurrentFilteredCommands() {
+        const prefix = this.getCurrentPrefix();
+        return this.commands.filter(cmd =>
+            cmd.name.toLowerCase().includes(prefix.toLowerCase())
+        );
+    }
+
+    positionDropdown() {
+        const rect = this.input.getBoundingClientRect();
+        const dropdownRect = this.dropdown.getBoundingClientRect();
+
+        let left = rect.left;
+        let top = rect.bottom + 4;
+
+        if (left + dropdownRect.width > window.innerWidth) {
+            left = window.innerWidth - dropdownRect.width - 12;
+        }
+        if (top + dropdownRect.height > window.innerHeight) {
+            top = rect.top - dropdownRect.height - 4;
+        }
+
+        this.dropdown.style.left = left + 'px';
+        this.dropdown.style.top = top + 'px';
+    }
+
+    close() {
+        this.isOpen = false;
+        this.activeIndex = -1;
+        if (this.dropdown) {
+            this.dropdown.classList.remove('visible');
+        }
+    }
+
+    handleOutsideClick(e) {
+        if (this.isOpen && !this.dropdown.contains(e.target) && e.target !== this.input) {
+            this.close();
+        }
+    }
+}
+
 const DOM_IDS = {
     sidebar: 'sidebar',
     conversationsList: 'conversations-list',
@@ -53,6 +275,7 @@ const DOM_IDS = {
     main: 'main',
     sidebarToggle: 'sidebar-toggle',
     settingsBtn: 'settings-btn',
+    slashDropdown: 'slash-command-dropdown',
 
     settingsOverlay: 'settings-overlay',
     closeSettings: 'close-settings',
@@ -95,7 +318,16 @@ function loadConversations() {
 }
 
 function saveConversations(conversations) {
-    var stringJson = JSON.stringify(conversations || state.conversations);
+    // Strip pdfAttachment before persisting to avoid localStorage quota issues
+    const serializable = (conversations || state.conversations).map(conv => ({
+        ...conv,
+        messages: conv.messages.map(m => {
+            const copy = { ...m };
+            delete copy.pdfAttachment;
+            return copy;
+        })
+    }));
+    var stringJson = JSON.stringify(serializable);
     localStorage.setItem(CONVERSATIONS_KEY, stringJson);
 }
 
@@ -366,7 +598,7 @@ function setupPdfUpload() {
 
 function handlePdfFile(file, pdfUploadBtn, fileInfo) {
     // Validate file type
-    if (!file.type === 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
         alert('Please select a PDF file');
         return;
     }
@@ -385,10 +617,12 @@ function handlePdfFile(file, pdfUploadBtn, fileInfo) {
         document.getElementById(DOM_IDS.pdfFileInput).value = '';
     }
 
-    // Read file as Base64
+    // Read file as Base64 (raw, without data URL prefix)
     const reader = new FileReader();
     reader.onload = (e) => {
-        const base64Content = e.target.result;
+        // e.target.result is "data:application/pdf;base64,XXXX" — strip the prefix
+        const commaIndex = e.target.result.indexOf(',');
+        const base64Content = commaIndex > 0 ? e.target.result.substring(commaIndex + 1) : e.target.result;
         currentPdfFile = {
             file: file,
             base64: base64Content,
@@ -781,14 +1015,53 @@ function copyCodeToClipboard(code, btn) {
     });
 }
 
+/**
+ * Builds messages array for the chat API request.
+ *
+ * Content type elements supported in the `content` array:
+ *
+ * - `text` — Plain text message. Used for all regular chat messages and system prompts.
+ *   Format: `{ type: 'text', text: '<message content>' }`
+ *
+ * - `pdf` — Base64-encoded PDF document attachment. Used when a user uploads a PDF file.
+ *   Format: `{ type: 'pdf', text: '<base64-encoded PDF data>' }`
+ *
+ * A single message can contain both types (e.g., a text prompt alongside a PDF attachment).
+ *
+ * @param {Array} conversations - Array of conversation objects
+ * @param {string} currentId - ID of the current conversation
+ * @param {Object} config - Current configuration object
+ * @returns {Array} Formatted messages array ready for the API
+ */
 function buildRequestMessages(conversations, currentId, config) {
     const conv = conversations.find(c => c.id === currentId);
     if (!conv) return [];
 
-    let messages = conv.messages.map(m => ({ role: m.role, content: m.content }));
+    let messages = conv.messages.map(m => {
+        // Reconstruct PDF message in the proper format
+        if (m.pdfAttachment) {
+            const attachment = m.pdfAttachment;
+            const prefix = `[PDF-ATTACHMENT:${attachment.name}]\n`;
+            const userPrompt = m.content.startsWith(prefix) 
+                ? m.content.substring(prefix.length) 
+                : m.content;
+            return {
+                role: m.role,
+                content: [
+                    { type: 'text', text: userPrompt },
+                    { type: 'pdf', text: attachment.base64 }
+                ]
+            };
+        }
+        // Normal message — wrap in array if not already
+        if (typeof m.content === 'string') {
+            return { role: m.role, content: [{ type: 'text', text: m.content }] };
+        }
+        return { role: m.role, content: m.content };
+    });
 
     if (config.systemPrompt) {
-        messages.unshift({ role: 'system', content: config.systemPrompt });
+        messages.unshift({ role: 'system', content: [{ type: 'text', text: config.systemPrompt }] });
     }
 
     return messages;
@@ -1066,8 +1339,14 @@ async function sendMessage() {
 
     // Build message content with PDF if attached
     let messageContent = text;
+    let pdfAttachment = null;
     if (currentPdfFile) {
-        messageContent = `[PDF: ${currentPdfFile.name}] ${messageContent}`;
+        messageContent = `[PDF-ATTACHMENT:${currentPdfFile.name}]\n${text}`;
+        pdfAttachment = {
+            name: currentPdfFile.name,
+            size: currentPdfFile.size,
+            base64: currentPdfFile.base64
+        };
     }
 
     els[DOM_IDS.messageInput].value = '';
@@ -1078,7 +1357,16 @@ async function sendMessage() {
 
     if (!conv) return;
 
-    conv.messages.push({ role: 'user', content: messageContent });
+    const userMessage = { role: 'user', content: messageContent };
+    if (pdfAttachment) {
+        userMessage.pdfAttachment = pdfAttachment;
+    }
+    conv.messages.push(userMessage);
+    // Clear PDF from memory after attaching to message
+    currentPdfFile = null;
+    els[DOM_IDS.pdfUploadBtn].classList.remove('active');
+    els[DOM_IDS.fileInfo].classList.add('hidden');
+    els[DOM_IDS.pdfFileInput].value = '';
     if (conv.messages.length === 1) {
         handleTitleUpdate(state.currentConversationId, messageContent);
     }
@@ -1344,6 +1632,8 @@ function setupEventListeners() {
 
     els[DOM_IDS.sendBtn].addEventListener('click', sendMessage);
     els[DOM_IDS.stopBtn].addEventListener('click', stopGeneration);
+
+    const slashManager = new SlashCommandManager(els[DOM_IDS.messageInput], SLASH_COMMANDS);
 
     els[DOM_IDS.messageInput].addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
