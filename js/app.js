@@ -58,10 +58,60 @@ class SlashCommandManager {
         document.addEventListener('click', (e) => this.handleOutsideClick(e));
     }
 
+    getPlainText() {
+        return this.input.innerText || '';
+    }
+
+    setPlainText(text) {
+        this.input.innerText = text;
+    }
+
+    getCursorPos() {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return 0;
+        const range = selection.getRangeAt(0);
+        const preCursor = document.createRange();
+        preCursor.selectNodeContents(this.input);
+        preCursor.setEnd(range.startContainer, range.startOffset);
+        return preCursor.toString().length;
+    }
+
+    setCursorPos(pos) {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        let charIndex = 0;
+        const nodeStack = [this.input];
+        let node;
+        let foundStart = false;
+        let foundEnd = false;
+
+        while (!foundEnd && nodeStack.length > 0) {
+            node = nodeStack.pop();
+            if (node.nodeType === Node.TEXT_NODE) {
+                const nextIndex = charIndex + node.textContent.length;
+                if (!foundStart && charIndex <= pos && pos <= nextIndex) {
+                    range.setStart(node, pos - charIndex);
+                    range.collapse(true);
+                    foundStart = true;
+                }
+                charIndex = nextIndex;
+            } else {
+                for (let i = node.childNodes.length - 1; i >= 0; i--) {
+                    nodeStack.push(node.childNodes[i]);
+                }
+            }
+        }
+
+        selection.removeAllRanges();
+        if (foundStart) {
+            selection.addRange(range);
+        }
+    }
+
     handleInput() {
-        const value = this.input.value;
-        const cursorPos = this.input.selectionStart;
-        const textBeforeCursor = value.slice(0, cursorPos);
+        const text = this.getPlainText();
+        const cursorPos = this.getCursorPos();
+        const textBeforeCursor = text.slice(0, cursorPos);
         const slashIndex = textBeforeCursor.lastIndexOf('/');
 
         if (slashIndex === -1) {
@@ -69,7 +119,7 @@ class SlashCommandManager {
             return;
         }
 
-        const afterSlash = value.slice(slashIndex + 1, cursorPos);
+        const afterSlash = text.slice(slashIndex + 1, cursorPos);
         if (afterSlash.includes(' ')) {
             this.close();
             return;
@@ -91,7 +141,6 @@ class SlashCommandManager {
     handleKeydown(e) {
         if (!this.isOpen) {
             if (e.key === '/' && e.ctrlKey === false && e.metaKey === false) {
-                // Let the input handle the "/" character, then handleInput will open the dropdown
                 return;
             }
             return;
@@ -119,14 +168,6 @@ class SlashCommandManager {
             if (this.activeIndex >= 0) {
                 this.select(this.activeIndex);
             }
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            this.close();
-        } else if (e.key === 'Tab') {
-            e.preventDefault();
-            if (this.activeIndex >= 0) {
-                this.select(this.activeIndex);
-            }
         }
     }
 
@@ -141,20 +182,49 @@ class SlashCommandManager {
         const command = visible[index];
         if (!command) return;
 
-        const value = this.input.value;
-        const cursorPos = this.input.selectionStart;
-        const textBeforeCursor = value.slice(0, cursorPos);
+        const text = this.getPlainText();
+        const cursorPos = this.getCursorPos();
+        const textBeforeCursor = text.slice(0, cursorPos);
         const slashIndex = textBeforeCursor.lastIndexOf('/');
 
-        const newValue = value.slice(0, slashIndex) + '/' + command.name + value.slice(cursorPos);
-        this.input.value = newValue;
+        // Replace the command text with a styled span
+        const beforeSlash = text.slice(0, slashIndex);
+        const afterCursor = text.slice(cursorPos);
+        const commandText = `/${command.name}`;
+
+        // Clear and rebuild with span
+        this.input.innerHTML = '';
+        if (beforeSlash) {
+            this.createTextNodes(beforeSlash);
+        }
+        
+        const span = document.createElement('span');
+        span.className = 'command-span';
+        span.textContent = commandText;
+        this.input.appendChild(span);
+        
+        if (afterCursor) {
+            this.createTextNodes(afterCursor);
+        }
 
         const newCursorPos = slashIndex + 1 + command.name.length;
-        this.input.setSelectionRange(newCursorPos, newCursorPos);
+        this.setCursorPos(newCursorPos);
         this.input.dispatchEvent(new Event('input'));
         this.input.focus();
 
         this.close();
+    }
+
+    createTextNodes(text) {
+        const fragments = text.split('\n');
+        fragments.forEach((fragment, i) => {
+            if (i > 0) {
+                this.input.appendChild(document.createElement('br'));
+            }
+            if (fragment) {
+                this.input.appendChild(document.createTextNode(fragment));
+            }
+        });
     }
 
     render(items, prefix) {
@@ -209,12 +279,12 @@ class SlashCommandManager {
     }
 
     getCurrentPrefix() {
-        const value = this.input.value;
-        const cursorPos = this.input.selectionStart;
-        const textBeforeCursor = value.slice(0, cursorPos);
+        const text = this.getPlainText();
+        const cursorPos = this.getCursorPos();
+        const textBeforeCursor = text.slice(0, cursorPos);
         const slashIndex = textBeforeCursor.lastIndexOf('/');
         if (slashIndex === -1 || slashIndex !== cursorPos - 1) return '';
-        return value.slice(slashIndex + 1, cursorPos);
+        return text.slice(slashIndex + 1, cursorPos);
     }
 
     getCurrentFilteredCommands() {
@@ -469,7 +539,7 @@ function appendMessage(container, role, content, animate = true) {
             // Re-render only messages up to the retry point
             renderMessages(container, conv.messages, () => highlightAllCode(container), () => {}, () => {});
             removeTypingIndicator();
-            els[DOM_IDS.messageInput].value = resendMsg.content;
+            els[DOM_IDS.messageInput].innerText = resendMsg.content;
             els[DOM_IDS.messageInput].dispatchEvent(new Event('input'));
             els[DOM_IDS.messageInput].focus();
             requestAnimationFrame(() => sendMessage());
@@ -1186,7 +1256,7 @@ function setupInputAutoResize(messageInput, sendBtn) {
     messageInput.addEventListener('input', () => {
         messageInput.style.height = 'auto';
         messageInput.style.height = Math.min(messageInput.scrollHeight, UI.MAX_INPUT_HEIGHT) + 'px';
-        sendBtn.disabled = !messageInput.value.trim();
+        sendBtn.disabled = !messageInput.innerText.trim();
     });
 }
 
@@ -1323,7 +1393,7 @@ function handleTitleUpdate(convId, content) {
 }
 
 async function sendMessage() {
-    const text = els[DOM_IDS.messageInput].value.trim();
+    const text = els[DOM_IDS.messageInput].innerText.trim();
     if (!text && !currentPdfFile) return;
 
     if (!state.currentConversationId) {
@@ -1349,8 +1419,7 @@ async function sendMessage() {
         };
     }
 
-    els[DOM_IDS.messageInput].value = '';
-    els[DOM_IDS.messageInput].style.height = 'auto';
+    els[DOM_IDS.messageInput].innerHTML = '';
     els[DOM_IDS.sendBtn].disabled = true;
     els[DOM_IDS.sendBtn].classList.add('hidden');
     els[DOM_IDS.stopBtn].classList.remove('hidden');
@@ -1416,8 +1485,8 @@ async function handleCompactCommand() {
 Conversation history:
 ${conversationHistory}`;
 
-    els[DOM_IDS.messageInput].value = 'Compacting conversation...';
-    els[DOM_IDS.messageInput].disabled = true;
+    els[DOM_IDS.messageInput].innerText = 'Compacting conversation...';
+    els[DOM_IDS.messageInput].querySelectorAll('.command-span').forEach(el => el.remove());
     els[DOM_IDS.sendBtn].disabled = true;
     els[DOM_IDS.stopBtn].classList.remove('hidden');
     els[DOM_IDS.stopBtn].textContent = 'Stop Compacting';
@@ -1493,7 +1562,7 @@ ${conversationHistory}`;
 
         // Hide loading overlay and reset UI
         document.getElementById('loading-overlay').classList.add('hidden');
-        els[DOM_IDS.messageInput].value = '';
+        els[DOM_IDS.messageInput].innerHTML = '';
         els[DOM_IDS.sendBtn].disabled = false;
         els[DOM_IDS.sendBtn].classList.remove('hidden');
         els[DOM_IDS.stopBtn].classList.add('hidden');
@@ -1502,7 +1571,7 @@ ${conversationHistory}`;
     } catch (err) {
         if (err.name === 'AbortError') {
             document.getElementById('loading-overlay').classList.add('hidden');
-            els[DOM_IDS.messageInput].value = '';
+            els[DOM_IDS.messageInput].innerHTML = '';
             els[DOM_IDS.sendBtn].disabled = false;
             els[DOM_IDS.sendBtn].classList.remove('hidden');
             els[DOM_IDS.stopBtn].classList.add('hidden');
@@ -1638,7 +1707,7 @@ function setupEventListeners() {
     els[DOM_IDS.messageInput].addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            const text = els[DOM_IDS.messageInput].value.trim();
+            const text = els[DOM_IDS.messageInput].innerText.trim();
             if (text.startsWith('/compact')) {
                 handleCompactCommand();
             } else if (!els[DOM_IDS.sendBtn].disabled) {
@@ -1666,7 +1735,7 @@ function setupEventListeners() {
         conv.messages = conv.messages.slice(0, userIndex + 1);
         saveConversations();
         removeTypingIndicator();
-        els[DOM_IDS.messageInput].value = resendMsg.content;
+        els[DOM_IDS.messageInput].innerText = resendMsg.content;
         els[DOM_IDS.messageInput].dispatchEvent(new Event('input'));
         els[DOM_IDS.messageInput].focus();
         requestAnimationFrame(() => sendMessage());
