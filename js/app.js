@@ -302,7 +302,7 @@ ${conversationHistory}`;
     const abortController = new AbortController();
 
     const messages = buildRequestMessages(state.conversations, state.currentConversationId, state.config);
-    messages.push({ role: 'user', content: compactPrompt });
+    messages.push({ role: 'user', content: [{ type: 'text', text: compactPrompt }] });
     const payload = buildRequestPayload(state.config, messages);
 
     try {
