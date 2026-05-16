@@ -1153,6 +1153,11 @@ body::after {
     border-radius: 2px;
 }
 
+.api-url-toggle-btn-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
 .api-url-toggle-btn {
     width: 30px;
     height: 30px;
@@ -1180,6 +1185,52 @@ body::after {
 }
 
 .api-url-toggle-btn.disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+/* === Backend Tooltip === */
+
+.backend-tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: var(--bg-code);
+    color: var(--text-code);
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition), transform var(--transition);
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.backend-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: var(--bg-code) transparent transparent transparent;
+}
+
+.api-url-toggle-btn-wrapper:hover .backend-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+    pointer-events: auto;
+}
+
+.pdf-upload-btn.disabled {
     opacity: 0.4;
     pointer-events: none;
     cursor: not-allowed;

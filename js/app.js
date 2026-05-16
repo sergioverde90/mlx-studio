@@ -54,7 +54,7 @@ async function checkBackendReachable() {
     } catch {
         state.isBackendReachable = false;
     }
-    setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], state.isBackendReachable);
+    setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], els[DOM_IDS.pdfUploadBtn], state.isBackendReachable);
 }
 
 // === DOM Initialization ===
@@ -483,7 +483,7 @@ function setupEventListeners() {
         state.config.useLocalStudioUrl = !state.config.useLocalStudioUrl;
         saveConfig(state.config);
         updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
-        setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], state.isBackendReachable);
+    setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], els[DOM_IDS.pdfUploadBtn], state.isBackendReachable);
     });
 
     els[DOM_IDS.thinkingToggleBtn].addEventListener('click', () => {
@@ -553,7 +553,7 @@ function setupEventListeners() {
 }
 
 // === Initialization ===
-function init() {
+async function init() {
     initDOM();
     renderConversationsUI();
     setupSidebar();
@@ -562,7 +562,7 @@ function init() {
     updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
     updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
     els[DOM_IDS.messageInput].focus();
-    checkBackendReachable();
+    await checkBackendReachable();
 }
 
 document.addEventListener('DOMContentLoaded', init);

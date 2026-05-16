@@ -94,13 +94,34 @@ export function setupInputAutoResize(messageInput, sendBtn) {
     });
 }
 
-export function setBackendToggleState(apiUrlToggleBtn, isReachable) {
+export function setBackendToggleState(apiUrlToggleBtn, pdfUploadBtn, isReachable) {
+    const wrapper = apiUrlToggleBtn.closest('.api-url-toggle-btn-wrapper');
+
     if (isReachable) {
         apiUrlToggleBtn.classList.remove('disabled');
         apiUrlToggleBtn.title = 'Toggle API URL';
+        if (wrapper) {
+            const tooltip = wrapper.querySelector('.backend-tooltip');
+            if (tooltip) tooltip.remove();
+        }
+        if (pdfUploadBtn) {
+            pdfUploadBtn.classList.remove('disabled');
+            pdfUploadBtn.title = 'Upload PDF';
+        }
     } else {
         apiUrlToggleBtn.classList.add('disabled');
-        apiUrlToggleBtn.title = 'Backend not reachable';
+        if (!wrapper) return;
+        let tooltip = wrapper.querySelector('.backend-tooltip');
+        if (!tooltip) {
+            tooltip = document.createElement('span');
+            tooltip.className = 'backend-tooltip';
+            tooltip.textContent = 'tools not available. Backend not reachable';
+            wrapper.appendChild(tooltip);
+        }
+        if (pdfUploadBtn) {
+            pdfUploadBtn.classList.add('disabled');
+            pdfUploadBtn.title = 'Tools not available';
+        }
     }
 }
 
