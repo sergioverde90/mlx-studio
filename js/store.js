@@ -4,7 +4,8 @@ export const state = {
     config: loadConfig(),
     conversations: loadConversations(),
     currentConversationId: null,
-    isGenerating: false
+    isGenerating: false,
+    isBackendReachable: true
 };
 
 export const els = {};

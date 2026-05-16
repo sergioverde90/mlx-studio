@@ -94,6 +94,16 @@ export function setupInputAutoResize(messageInput, sendBtn) {
     });
 }
 
+export function setBackendToggleState(apiUrlToggleBtn, isReachable) {
+    if (isReachable) {
+        apiUrlToggleBtn.classList.remove('disabled');
+        apiUrlToggleBtn.title = 'Toggle API URL';
+    } else {
+        apiUrlToggleBtn.classList.add('disabled');
+        apiUrlToggleBtn.title = 'Backend not reachable';
+    }
+}
+
 export function isMobile() {
     return window.innerWidth <= UI.MOBILE_BREAKPOINT;
 }

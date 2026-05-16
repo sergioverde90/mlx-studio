@@ -24,7 +24,8 @@ import {
     updateThinkingToggleVisual,
     setupInputAutoResize,
     isMobile,
-    closeSidebar
+    closeSidebar,
+    setBackendToggleState
 } from './ui.js';
 import { SlashCommandManager } from './slash-commands.js';
 
@@ -36,6 +37,24 @@ function getApiUrl() {
     return state.config.useLocalStudioUrl
         ? 'http://localhost:8081/v1/chat/completions'
         : 'http://localhost:8080/v1/chat/completions';
+}
+
+// === Backend Reachability Check ===
+async function checkBackendReachable() {
+    try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        await fetch('http://localhost:8081/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages: [], model: '' }),
+            signal: controller.signal
+        });
+        state.isBackendReachable = true;
+    } catch {
+        state.isBackendReachable = false;
+    }
+    setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], state.isBackendReachable);
 }
 
 // === DOM Initialization ===
@@ -460,9 +479,11 @@ function setupEventListeners() {
     els[DOM_IDS.newChatBtn].addEventListener('click', createNewConversation);
 
     els[DOM_IDS.apiUrlToggleBtn].addEventListener('click', () => {
+        if (!state.isBackendReachable) return;
         state.config.useLocalStudioUrl = !state.config.useLocalStudioUrl;
         saveConfig(state.config);
         updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
+        setBackendToggleState(els[DOM_IDS.apiUrlToggleBtn], state.isBackendReachable);
     });
 
     els[DOM_IDS.thinkingToggleBtn].addEventListener('click', () => {
@@ -541,6 +562,7 @@ function init() {
     updateApiUrlToggleVisual(els[DOM_IDS.apiUrlToggleBtn], state.config.useLocalStudioUrl);
     updateThinkingToggleVisual(els[DOM_IDS.thinkingToggleBtn], state.config.enableThinking);
     els[DOM_IDS.messageInput].focus();
+    checkBackendReachable();
 }
 
 document.addEventListener('DOMContentLoaded', init);
